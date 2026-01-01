@@ -1,0 +1,490 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- Dockscreens for Object Creation -->
+	
+	<DockScreen UNID="&ADT_dsCreateObjectMain;"
+			name=				"Arisaya Debug Tools: Ship"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayPickerList ADT_uiCreateObjectMainMenuOptions)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsCreateObjectOptions;"
+			name=				"Arisaya Debug Tools: Ship"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayPickerList ADT_uiCreateObjectOptionsMenuOptions)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsCreateObject;"
+			name=				"Arisaya Debug Tools: Create Object"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			attributes=			"ADT_selfNesting, ADT_canDebugModeSortKeys"
+			>
+		<!-- Define the list we need -->
+		<List
+			iconWidth="0"
+			iconHeight="0">
+			 (block
+			 	(
+					(pickerList (list))
+					(idx (ADT_getTemp 'cursor))
+					(filterCriteriaDefault "sT")
+					(filterCriteriaRaw (or (@ gData 'criteria) filterCriteriaDefault))
+					(firstCriteria (@ (strSplit filterCriteriaRaw " ") 0))
+					(firstCriteriaIsSecondary (or (strBeginsWith firstCriteria "+") (strBeginsWith firstCriteria "-") (strBeginsWith firstCriteria "=")))
+					(primaryCriteria
+						(if firstCriteriaIsSecondary filterCriteriaDefault
+							;;	we allow t T or s so we only need to be case sensitive on s
+							(if (eq (count (strReplace (strReplace (strReplace firstCriteria "s" "/" 'case) "t" "/") "/" "")) 0)
+								;;	if we eliminted all characters we are good to go
+								firstCriteria
+								;;	otherwise we have invalid characters and just use the default
+								filterCriteriaDefault
+							)
+						)
+					)
+					(primaryCriteriaIsInvalid (= primaryCriteria filterCriteriaDefault))
+					(filterCriteria (if firstCriteriaIsSecondary (cat filterCriteriaDefault filterCriteriaRaw) filterCriteriaRaw))
+					(filterNameDefault "")
+					(filterName (or (@ gData 'name) filterNameDefault))
+				)
+			 	(enum (typFind filterCriteria) theType
+					(block
+						(
+							(typeName (typGetDataField theType 'name))
+							(objName (typGetName theType))
+							(img
+								(if (typMatches theType "s")
+									(or (shpGetImageDesc theType {type: 'schematic}) (typGetImageDesc theType))
+									(typGetImageDesc theType)
+								)
+							)
+						)
+						(if (or (ADT_strMatchesPattern typeName filterName) (ADT_strMatchesPattern objName filterName))
+							;;	add this if we matched
+							(lnkAppend pickerList 
+								(list 
+									;;set the display name
+									(cat typeName (if (!= typeName objName) (cat " - " objName)))
+									;;set the image
+									() ;img ;;We dont currently show the image due to memory efficiency reasons. Future engine improvements may make this feasible
+									;;construct the description
+									(cat
+										"Type UNID: " (fmtUNID theType)
+										;" | "
+										;"Default Sovereign UNID: " (fmtUNID (or (typ@ theType 'defaultSovereign) (typ@ theType 'sovereign)))
+										;" | "
+										;"Default Sovereign: " (typGetName (or (typ@ theType 'defaultSovereign) (typ@ theType 'sovereign)))
+										(if (typGetData &ADT_dsCreateObject; 'sortKeyDisplay)
+											(cat
+												"\nSort Key:\n"
+												(ADT_sortKeyObjectTypes theType)
+											)
+											""
+										)
+									)
+									;;additional data
+									{
+										theType: theType
+									}
+									;;sort key
+									(ADT_sortKeyObjectTypes theType)
+								)
+							)
+							;; otherwise we skip it
+						)
+					)
+			 	)
+				(scrSetListCursor gScreen idx)
+			 	(sort pickerList 'ascending 4)
+			 )
+		</List>
+		<Panes>
+			<Default
+				showTextInput="true"
+				desc="Pick an object to spawn. You can filter by both name and criteria. For example, '*volcanic*/t' will search all stations (including world-scale objects) that include 'volcanic' and match criteria 't'. If searching only by criteria, start your query with '/'. If searching for an object with '/' in the name, put an extra '/' at the end to filter with default criteria (sT: ships and station-scale stations)">
+			
+				<onPaneInit>
+					(block ()
+					)
+				</onPaneInit>
+				<Actions>
+					<Action name="Refresh (if filter) / Create (if empty)" default="1">
+						(block
+							(
+								(rawFilter (scrGetInputText gScreen))
+								(optionEntry (scrGetListEntry gScreen))
+							)
+							(if (and (=== rawFilter "") optionEntry)
+								;;	create the object if no filter criteria was specified
+								(block
+									(
+										(option (item optionEntry 3))
+										(theType (@ option 'theType))
+										(spawnPos (objGetPos gPlayerShip))
+										(isShip (typMatches thetype "s"))
+									)
+									(if isShip
+										(block 
+											(
+												(theShip (sysCreateShip theType spawnPos (or (typ@ theType 'defaultSovereign) &ADT_svCreateObjectNullSov;)))
+												(theShipRef (objGetID theShip))
+												(theAnchor (sysCreateStation &ADT_vtCreateObjectShipAnchor; spawnPos))
+												(theAnchorRef (objGetID theAnchor))
+											)
+											(shpOrder theShip 'orbit theAnchor 70)
+											(objSetData theShip 'ADT_anchor theAnchorRef)
+											(objSetData theAnchor 'ADT_anchoredShip theShip)
+											(objRegisterForEvents theAnchor theShip)	;;	this is so that the anchor can delete itself if the ship is deleted/destroyed
+										)
+										(sysCreateStation thetype spawnPos)
+									)
+									(ADT_setTemp 'cursor 0)
+									(scrExitScreen gScreen 'forceUndock)
+								)
+								;;	otherwise we refresh to whatever was entered
+								(scrShowScreen gScreen &ADT_dsCreateObject; 'default (set@ (ADT_strSplitFilter rawFilter) (ADT_uiNestData)))
+							)
+						)
+					</Action>
+					<Action name="Mark Destination">
+						(block
+							(
+								(optionEntry (scrGetListEntry gScreen))
+								(option (item optionEntry 3))
+								(theType (@ option 'theType))
+							)
+							(shpOrderImmediate gPlayerShip 'approach theType 60)
+						)
+					</Action>
+					<Action name="Exit" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+	<!-- Sovereigns -->
+
+	<Sovereign UNID="&ADT_svCreateObjectNullSov;"
+			name="ADT Null Sovereign"
+			shortName="Null"
+			adjective="Null"
+			demonym="Null Sovereign Singleton"
+			plural="true"
+			alignment="neutral"
+			>
+		<Events>
+			<OnGlobalUniverseCreated>
+				(enum (typFind "v") sov
+					(block ()
+						(sovSetDisposition &ADT_svCreateObjectNullSov; sov 'neutral)
+						(sovSetDisposition sov &ADT_svCreateObjectNullSov; 'neutral)
+					)
+				)
+			</OnGlobalUniverseCreated>
+		</Events>
+	</Sovereign>
+
+	<Sovereign UNID="&ADT_svCreateObjectTeamA;"
+			name="ADT Team A"
+			shortName="ADT Team A"
+			adjective="ADT Team A"
+			demonym="ADT Sovereign Singleton (Team A)"
+			plural="true"
+			alignment="neutral"
+			>
+		<Events>
+			<OnGlobalUniverseCreated>
+				(enum (typFind "v") sov
+					(switch
+						;;	other ADT testing teams are enemies
+						(or (= sov &ADT_svCreateObjectTeamB;) (= sov &ADT_svCreateObjectTeamC;))
+							(block ()
+								(sovSetDisposition &ADT_svCreateObjectTeamA; sov 'enemy)
+								(sovSetDisposition sov &ADT_svCreateObjectTeamA; 'enemy)
+							)
+						;;	default
+						(block ()
+							(sovSetDisposition &ADT_svCreateObjectTeamA; sov 'neutral)
+							(sovSetDisposition sov &ADT_svCreateObjectTeamA; 'neutral)
+						)
+					)
+				)
+			</OnGlobalUniverseCreated>
+		</Events>
+	</Sovereign>
+
+	<Sovereign UNID="&ADT_svCreateObjectTeamB;"
+			name="ADT Team B"
+			shortName="ADT Team B"
+			adjective="ADT Team B"
+			demonym="ADT Sovereign Singleton (Team B)"
+			plural="true"
+			alignment="neutral"
+			>
+		<Events>
+			<OnGlobalUniverseCreated>
+				(enum (typFind "v") sov
+					(switch
+						;;	other ADT testing teams are enemies
+						(or (= sov &ADT_svCreateObjectTeamA;) (= sov &ADT_svCreateObjectTeamC;))
+							(block ()
+								(sovSetDisposition &ADT_svCreateObjectTeamB; sov 'enemy)
+								(sovSetDisposition sov &ADT_svCreateObjectTeamB; 'enemy)
+							)
+						;;	default
+						(block ()
+							(sovSetDisposition &ADT_svCreateObjectTeamB; sov 'neutral)
+							(sovSetDisposition sov &ADT_svCreateObjectTeamB; 'neutral)
+						)
+					)
+				)
+			</OnGlobalUniverseCreated>
+		</Events>
+	</Sovereign>
+
+	<Sovereign UNID="&ADT_svCreateObjectTeamC;"
+			name="ADT Team C"
+			shortName="ADT Team C"
+			adjective="ADT Team C"
+			demonym="ADT Sovereign Singleton (Team C)"
+			plural="true"
+			alignment="neutral"
+			>
+		<Events>
+			<OnGlobalUniverseCreated>
+				(enum (typFind "v") sov
+					(switch
+						;;	other ADT testing teams are enemies
+						(or (= sov &ADT_svCreateObjectTeamB;) (= sov &ADT_svCreateObjectTeamA;))
+							(block ()
+								(sovSetDisposition &ADT_svCreateObjectTeamC; sov 'enemy)
+								(sovSetDisposition sov &ADT_svCreateObjectTeamC; 'enemy)
+							)
+						;;	default
+						(block ()
+							(sovSetDisposition &ADT_svCreateObjectTeamC; sov 'neutral)
+							(sovSetDisposition sov &ADT_svCreateObjectTeamC; 'neutral)
+						)
+					)
+				)
+			</OnGlobalUniverseCreated>
+		</Events>
+	</Sovereign>
+
+	<!-- Stations -->
+
+	<StationType UNID="&ADT_vtCreateObjectShipAnchor;"
+			virtual=			"true"
+			sovereign=			"&ADT_svCreateObjectNullSov;"
+			>
+		<Events>
+			<OnObjDestroy>
+				(block
+					(
+						(anchored (objGetData gSource 'ADT_anchoredShip))
+						(multipleAnchored (= (typeOf anchored) 'list))
+					)
+					(if multipleAnchored
+						(block
+							(
+								(remaining (map anchored 'excludeNil anAnchored (if (= aDestroy (objGetObjByID anAnchored)) () anAnchored)))
+							)
+							(if (gr (count remaining) 0)
+								(objSetData gSource 'ADT_anchoredShip remaining)
+								(objRemove gSource)
+							)
+						)
+						(if (= aDestroy (objGetObjByID anchored))
+							;;remove if our object is destroyed
+							(objRemove gSource)
+						)
+					)
+				)
+			</OnObjDestroy>
+		</Events>
+	</StationType>
+
+    <!-- Helper Types -->
+    
+	<Type UNID="&ADT_vvCreateObjectSettings;"/>
+
+	<!-- Global Loader Types -->
+
+    <Type UNID="&ADT_vvGlobalLoaderObjCreate;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list )
+			</Definition>
+		</Properties>
+        <Events>
+            <ADT.onLoadGlobals>
+                (block ()
+
+                    ;   Global constants
+
+                    ;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Create object functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Sort Creatable Types
+					(setq ADT_sortKeyObjectTypes (lambda (typ)
+						(cat
+							"TYPE_PRIORITY:"
+							(hex (ADT_typCategoryPriority obj) 8)
+							"\nSOVEREIGN:"
+							(typGetName (or (typ@ theType 'defaultSovereign) (typ@ theType 'sovereign)))
+							"\nSOVEREIGN_UNID:"
+							(fmtUNID (or (typ@ theType 'defaultSovereign) (typ@ theType 'sovereign)))
+							"\nNAME:"
+							(typGetName typ)
+							"\nUNID:"
+							(fmtUNID typ)
+						)
+					))
+
+					;;	Type Priority Sort subkey
+					(setq ADT_typCategoryPriority (lambda (typ)
+						(block
+							(
+								(m (lambda (criteria) (typMatches typ criteria)))
+								(defaultSov (or (typ@ theType 'defaultSovereign) (typ@ theType 'sovereign)))
+								(isPlayer (= defaultSov &svPlayer;))
+								(isFriend (= (sovGetDisposition defaultSov &svPlayer;) 'friend))
+								(isNeutral (= (sovGetDisposition defaultSov &svPlayer;) 'neutral))
+								(isEnemy (= (sovGetDisposition defaultSov &svPlayer;) 'enemy))
+								(isStation (m "T"))
+								(isShip (m "s"))
+								(isWorld (m "t"))
+								(isVirtual (m "V"))
+								(isUntyped (=== (objGetType obj)))
+							)
+							(switch
+								isUntyped
+									0xFFFFFFFF
+								(and isShip isVirtual)
+									0xFFFFFFFE
+								(and isStation isVirtual)
+									0xFFFFFFFD
+								(and isStation isPlayer)
+									0x20
+								(and isStation isFriend)
+									0x21
+								(and isStation isNeutral)
+									0x22
+								(and isStation isEnemy)
+									0x23
+								isStation
+									0x24
+								(and isShip isPlayer)
+									0x40
+								(and isShip isFriend)
+									0x41
+								(and isShip isNeutral)
+									0x42
+								(and isShip isEnemy)
+									0x43
+								isShip
+									0x44
+								isWorld
+									0x50
+								;;	other
+								0x80000000
+							)
+						)
+					))
+
+					;;	Open obj create selection menu
+					(setq ADT_objCreateObjectSelectMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsCreateObject;)))
+
+					;;	Open obj create options menu
+					(setq ADT_objCreateObjectOptionsMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsCreateObjectOptions;)))
+
+					;;	List of all create objects options menu options (can be extended by other mods)
+					(setq ADT_uiCreateObjectMainMenuOptions (list
+						{
+							text: "Create objects"
+							action: ADT_objCreateObjectSelectMenuOpen
+							isDS: True
+						}
+						{
+							text: "Create objects settings"
+							action: ADT_objCreateObjectOptionsMenuOpen
+							isDS: True
+						}
+					))
+
+					;;	List of all create objects main menu options (can be extended by other mods)
+					(setq ADT_uiCreateObjectOptionsMenuOptions (list
+					))
+
+					;;	Open obj create menu
+					(setq ADT_objCreateMainMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsCreateObjectMain;)))
+
+                )
+            </ADT.onLoadGlobals>
+        </Events>
+    </Type>
+
+</TranscendenceModule>

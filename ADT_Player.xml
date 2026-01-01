@@ -1,0 +1,1992 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- Dockscreens for items -->
+	
+	<DockScreen UNID="&ADT_dsItemsMain;"
+			name=				"Arisaya Debug Tools: Item Creator"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			attributes=			"ADT_selfNesting, ADT_canDebugModeSortKeys"
+			>
+		<!-- Define the list we need -->
+		<List
+			iconWidth="32"
+			iconHeight="32">
+			 (block
+			 	(
+					(pickerList (list))
+					(idx (ADT_getTemp 'cursor))
+					(filterCriteriaDefault "*")
+					(filterCriteria (or (@ gData 'criteria) filterCriteriaDefault))
+					(filterNameDefault "")
+					(filterName (or (@ gData 'name) filterNameDefault))
+					(curAttributeDisplay (typGetData &ADT_dsItemsMain; 'attributeDisplay))
+					(curSortKeyDisplay (typGetData &ADT_dsItemsMain; 'sortKeyDisplay))
+				)
+			 	(enum (itmGetTypes filterCriteria) itmType
+					(block
+						(
+							(itemName (itmGetName itmType))
+						)
+						(typSetData &ADT_dsItemsMain; 'lastFilterCriteria filterCriteria)
+						(typSetData &ADT_dsItemsMain; 'lastFilterName filterName)
+						(if (ADT_strMatchesPattern itemName filterName)
+							;;	add this if we matched
+							(lnkAppend pickerList
+								(list 
+									;;set the display name
+									itemName
+									;;set the image
+									(itmGetImageDesc itmType)
+									;;construct the description
+									(cat
+										"Level: " (itmGetLevel itmType)
+										" | "
+										"Mass: " (itmGetMass itmType)
+										" | "
+										"Known: " (itmIsKnown itmType)
+										" | "
+										"Type UNID: " (hex itmType 8)
+										(if curAttributeDisplay (cat "\nAttributes: " (typ@ itmType 'attributes)))
+										(if curSortKeyDisplay (cat "\nSort Key: " (ADT_sortKeyItem itmType)))
+									)
+									;;additional data
+									{
+										itemType: itmType
+									}
+									;;sort key
+									(ADT_sortKeyItem itmType)
+								)
+							)
+							;; otherwise we skip it
+						)
+					)
+			 	)
+				(scrSetListCursor gScreen idx)
+				(sort pickerList 'ascending 4)
+			 )
+		</List>
+		<Panes>
+			<Default>
+			
+				<onPaneInit>
+					(block
+						(
+							(curItem (@ (@ (scrGetListEntry gScreen) 3) 'itemType))
+						)
+						(scrSetControlValue gScreen 'selectedItem
+							{
+								source: gPlayerShip
+								item: curItem
+							}
+						)
+						(scrEnableAction gScreen 0 True)
+						(scrEnableAction gScreen 1 True)
+						(scrEnableAction gScreen 2 True)
+						(scrSetDesc gScreen (cat 
+							"Pick an item to create. You can filter by both name and criteria.\n"
+							"For example, '*laser*/* +ei' will search all items that contain 'laser' and match criteria '* +ei'.\n"
+							"If searching only by criteria, start your query with '/'.\n"
+							"If searching for an item with '/' in the system name or node name, put an extra '/' at the end if filtering with default criteria"
+						))
+					)
+				</onPaneInit>
+
+				<Controls>
+					<Text id="desc"/>
+					<TextInput id="filter"/>
+					<ItemDisplay id="selectedItem"/>
+				</Controls>
+				
+				<Actions>
+					<Action name="Filter|Install (devices/armor)|Add" default="1">
+						(block
+							(
+								(rawFilter (scrGetInputText gScreen))
+								(optionEntry (scrGetListEntry gScreen))
+							)
+							(if (and (=== rawFilter "") optionEntry)
+								;;	check if item can be installed, otherwise add to cargo
+								(block
+									(
+										(option (item optionEntry 3))
+										(itmType (@ option 'itemType))
+										(doInstall (itmMatches itmType "d"))	;;	only install devices, separate system for armor
+										(doArmorInstall (itmMatches itmType "a"))
+										(quantity (if doArmorInstall (shpGetArmorCount gPlayerShip) 1))
+										(theItem (itmCreate itmType quantity))
+									)
+									(objAddItem gPlayership theItem quantity)
+									(switch
+										doInstall
+											(shpInstallDevice gPlayerShip theItem)
+										doArmorInstall
+											(for seg 0 (- (shpGetArmorCount gPlayerShip) 1) (shpInstallArmor gPlayerShip theItem seg))
+										;;	no default as we already added the item to the playership
+										()
+									)
+								)
+								;;	otherwise we refresh to whatever was entered
+								(scrShowScreen gScreen &ADT_dsItemsMain; 'default (set@ (ADT_strSplitFilter rawFilter) (ADT_uiNestData)))
+							)
+						)
+					</Action>
+					<Action name="Create Multiple (add to cargo)">
+						(scrShowSCreen gScreen &ADT_dsItemsCreateMultiple; 'default (@ (scrGetListEntry gScreen) 3)) ;; the data should be formatted as	{itemType: itemUNID}
+					</Action>
+					<Action name="Toggle display of Attributes">
+						(block
+							(
+								(lastFilterName (typGetData &ADT_dsItemsMain; 'lastFilterName))
+								(lastFilterCriteria (typGetData &ADT_dsItemsMain; 'lastFilterCriteria))
+								(curAttributeDisplay (typGetData &ADT_dsItemsMain; 'attributeDisplay))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(typSetData &ADT_dsItemsMain; 'attributeDisplay (if curAttributeDisplay () True))
+							(scrShowScreen gScreen &ADT_dsItemsMain; 'default
+								(set@
+									{
+										criteria: lastFilterCriteria
+										name: lastFilterName
+									}
+									(ADT_uiNestData)
+								)
+							)
+							(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+						)
+					</Action>
+					<Action name="Exit" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsItemsCreateMultiple;"
+			name=				"Arisaya Debug Tools: Item Creator"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<Panes>
+			<Default>
+			
+				<onPaneInit>
+					(block
+						(
+							(curItem (@ gData 'itemType))
+						)
+						(scrSetControlValue gScreen 'selectedItem
+							{
+								source: gPlayerShip
+								item: curItem
+							}
+						)
+					)
+				</onPaneInit>
+
+				<Controls>
+					<ItemDisplay id="selectedItem"/>
+					<Text id="desc">
+						Select how many of this item you would like to add to your cargo hold.
+					</Text>
+					<Counter id="quantity"></Counter>
+				</Controls>
+				
+				<Actions>
+					<Action name="Add to cargo" default="1">
+						(block
+							(
+								(quantity (scrGetCounter gScreen))
+							)
+							(if (gr quantity 0)
+								;;	check if item can be installed, otherwise add to cargo
+								(block
+									(
+										(itmType (@ gData 'itemType))
+										(quantity (min (pow 2 16) (max quantity 1)))
+										(theItems (itmCreate itmType quantity))
+									)
+									(objAddItem gPlayership theItems)
+									;;	Now we return to the previous screen
+									(scrExitScreen gScreen)
+								)
+								;;	otherwise just wait for the user to enter a non zero number
+								()
+							)
+						)
+					</Action>
+					<Action name="Back" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	<!-- Dockscreens for currencies -->
+
+		<!-- Reference item types used for sorting -->
+	<ItemType UNID="&ADT_itPriceRef100;"
+			name=				"ADT Price Reference Item"
+			level=				"1"
+			value=				"100"
+			mass=				"1"
+			frequency=			"notRandom"
+			attributes=			"ADT_referenceItem"
+			description=		"This is a reference item with a base value of 100 commonwealth credits."
+			>
+		<Image imageID="&rsItems1;" imageX="0" imageY="192" imageWidth="96" imageHeight="96"/>
+	</ItemType>
+	<ItemType UNID="&ADT_itPriceRef10000;"
+			name=				"ADT Price Reference Item"
+			level=				"1"
+			value=				"10000"
+			mass=				"1"
+			frequency=			"notRandom"
+			attributes=			"ADT_referenceItem"
+			description=		"This is a reference item with a base value of 10,000 commonwealth credits."
+			>
+		<Image imageID="&rsItems1;" imageX="0" imageY="192" imageWidth="96" imageHeight="96"/>
+	</ItemType>
+	<ItemType UNID="&ADT_itPriceRef1000000;"
+			name=				"ADT Price Reference Item"
+			level=				"1"
+			value=				"1000000"
+			mass=				"1"
+			frequency=			"notRandom"
+			attributes=			"ADT_referenceItem"
+			description=		"This is a reference item with a base value of 1,000,000 commonwealth credits."
+			>
+		<Image imageID="&rsItems1;" imageX="0" imageY="192" imageWidth="96" imageHeight="96"/>
+	</ItemType>
+
+	<!-- Currency browser -->
+	
+	<DockScreen UNID="&ADT_dsEconomySelector;"
+			name=				"Arisaya Debug Tools: Economy Menu"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			attributes=			"ADT_selfNesting, ADT_canDebugModeSortKeys"
+			>
+		<!-- Define the list we need -->
+		<List
+			iconWidth="0"
+			iconHeight="32">
+			 (block
+			 	(
+					(pickerList (list))
+					(idx (ADT_getTemp 'cursor))
+					(filterCriteriaDefault "$")
+					(filterCriteriaRaw (or (@ gData 'criteria) filterCriteriaDefault))
+					(filterCriteria (if (strBeginsWith filterCriteriaRaw "$") filterCriteriaRaw (cat "$ " filterCriteriaRaw)))
+					(filterNameDefault "")
+					(filterName (or (@ gData 'name) filterNameDefault))
+					(curAttributeDisplay (typGetData &ADT_dsEconomySelector; 'attributeDisplay))
+					(curSortKeyDisplay (typGetData &ADT_dsEconomySelector; 'sortKeyDisplay))
+				)
+			 	(enum (typFind filterCriteria) econType
+					(block
+						(
+							(econName (typGetName econType))
+						)
+						(typSetData &ADT_dsEconomySelector; 'lastFilterCriteria filterCriteria)
+						(typSetData &ADT_dsEconomySelector; 'lastFilterName filterName)
+						(if (ADT_strMatchesPattern econName filterName)
+							;;	add this if we matched
+							(lnkAppend pickerList
+								(list 
+									;;set the display name
+									econName
+									;;	no image
+									()
+									;;construct the description
+									(cat
+										"Owned: " (objGetBalance gPlayerShip econType)
+										(if (objGetTarget gPlayerShip)
+											;;	If we have a target display how much money it has
+											(cat
+												" | "
+												"Target Owned: " (objGetBalance (objGetTarget gPlayerShip) econType)
+											)
+											;;	Otherwise skip printing
+											""
+										)
+										" | "
+										"Ratio to Credits: " (ADT_econCalcRatio econType) "%"
+										" | "
+										"Type UNID: " (hex econType 8)
+										(if curAttributeDisplay (cat "\nAttributes: " (typ@ econType 'attributes)))
+										(if curSortKeyDisplay (cat "\nSort Key: " (ADT_sortKeyEcons econType)))
+									)
+									;;additional data
+									{
+										econType: econType
+									}
+									;;sort key
+									(ADT_sortKeyEcons econType)
+								)
+							)
+							;; otherwise we skip it
+						)
+					)
+			 	)
+				(scrSetListCursor gScreen idx)
+				(sort pickerList 'ascending 4)
+			 )
+		</List>
+		<Panes>
+			<Default>
+			
+				<onPaneInit>
+					(block
+						(
+							(curEcon (@ (@ (scrGetListEntry gScreen) 3) 'econType))
+						)
+						(scrSetControlValue gScreen 'selectedItem
+							{
+								source: gPlayerShip
+								item: curEcon
+							}
+						)
+						(scrEnableAction gScreen 0 True)
+						(scrEnableAction gScreen 1 True)
+						(scrEnableAction gScreen 2 True)
+						(scrSetDesc gScreen (cat 
+							"Pick a currency to edit values for. You can filter by both name and criteria.\n"
+							"For example, '*credit*/* +Commonwealth' will search all currencies that contain the substring 'credit' and match criteria '$ +Commonwealth'.\n"
+							"Note: actual basegame credits do not have any attributes, so the above query returns nothing unless modded."
+							"If searching only by criteria, start your query with '/'.\n"
+							"If searching for a currency with '/' in the system name or node name, put an extra '/' at the end if filtering with default criteria"
+						))
+					)
+				</onPaneInit>
+
+				<Controls>
+					<Text id="desc"/>
+					<TextInput id="filter"/>
+					<ItemDisplay id="selectedItem"/>
+				</Controls>
+				
+				<Actions>
+					<Action name="Filter|Add" default="1">
+						(block
+							(
+								(rawFilter (scrGetInputText gScreen))
+								(optionEntry (scrGetListEntry gScreen))
+							)
+							(if (and (=== rawFilter "") optionEntry)
+								;;	allow adding this currency to the player or target
+								(scrShowScreen gScreen &ADT_dsEditMoney; 'default (@ (scrGetListEntry gScreen) 3)) ;; the data should be formatted as	{econType: econUNID}
+								;;	otherwise we refresh to whatever was entered
+								(scrShowScreen gScreen &ADT_dsEconomySelector; 'default (set@ (ADT_strSplitFilter rawFilter) (ADT_uiNestData)))
+							)
+						)
+					</Action>
+					<Action name="Toggle display of Attributes">
+						(block
+							(
+								(lastFilterName (typGetData &ADT_dsEconomySelector; 'lastFilterName))
+								(lastFilterCriteria (typGetData &ADT_dsEconomySelector; 'lastFilterCriteria))
+								(curAttributeDisplay (typGetData &ADT_dsEconomySelector; 'attributeDisplay))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(typSetData &ADT_dsEconomySelector; 'attributeDisplay (if curAttributeDisplay () True))
+							(scrShowScreen gScreen &ADT_dsEconomySelector; 'default
+								(set@
+									{
+										criteria: lastFilterCriteria
+										name: lastFilterName
+									}
+									(ADT_uiNestData)
+								)
+							)
+							(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+						)
+					</Action>
+					<Action name="Exit" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsEditMoney;"
+			name=				"Arisaya Debug Tools: Add/Remove Money"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<Properties>
+			<Data id="econType"></Data>
+		</Properties>
+
+		<!-- Define the list we need -->
+		<Panes>
+			<Default>
+			
+				<onPaneInit>
+					(block
+						(
+							(econType (@ gData 'econType))
+							(curTarget (objGetTarget gPlayerShip))
+						)
+						(scrSet@ gScreen 'econType econType)
+						(scrEnableAction gScreen 1 curTarget)
+						(scrSetDesc gScreen (cat 
+							"Currently selected currency " (typGetName econType) ".\n"
+							"Select how much of this currency you would like to add to your account" (if curTarget " or your target's account." ".")
+						))
+					)
+				</onPaneInit>
+
+				<Controls>
+					<Text id="desc">
+						Select how much of this currency you would like to add to your account or your target's account.
+					</Text>
+					<Counter id="quantity"></Counter>
+				</Controls>
+				
+				<Actions>
+					<Action name="Add to your account" default="1">
+						(block
+							(
+								(quantity (scrGetCounter gScreen))
+								(curEcon (scr@ gScreen 'econType))
+							)
+							(if (gr quantity 0)
+								;;	add to the player
+								(objCredit gPlayerShip curEcon quantity)
+								;;	otherwise just wait for the user to enter a non zero number
+								()
+							)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+					<Action name="Add to your target" default="1">
+						(block
+							(
+								(quantity (scrGetCounter gScreen))
+								(curEcon (scr@ gScreen 'econType))
+							)
+							(if (gr quantity 0)
+								;;	add to the target
+								(objCredit (objGetTarget gPlayerShip) curEcon quantity)
+								;;	otherwise just wait for the user to enter a non zero number
+								()
+							)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+					<Action name="Back" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+
+	<!-- Dockscreens for ship features -->
+	
+	<DockScreen UNID="&ADT_dsShipMain;"
+			name=				"Arisaya Debug Tools: Ship"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayPickerList ADT_uiShipMenuOptions)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+	<!-- Dock Screens for virtual ship broker -->
+	
+	<DockScreen unid="&ADT_dsShipBroker;"
+			inherit=			"&dsRPGShipBroker;"
+			nestedScreen=		"true"
+			>
+		
+		<OnScreenInit>
+			;;	run these dynamic properties to initialize the data
+			(obj@ (typ@ &ADT_vtShipBroker; 'ADT.getInstance) 'rpg.shipBrokerInventory)
+		</OnScreenInit>
+		
+		<Display type="carouselSelector"
+				style="shipList"
+				>
+			<OnDisplayInit>
+				(map (objGetData (typ@ &ADT_vtShipBroker; 'ADT.getInstance) 'shipBroker.list) shipID
+					(block (
+						(shipObj (objGetObjByID shipID))
+						(shipClass (objGetType shipObj))
+						)
+						{
+						title: (objGetName shipObj '(generic titleCapitalize))
+						icon: (shpGetImageDesc shipClass { rotation:90 })
+
+						largeIcon: (shpGetImageDesc shipClass { type:'schematic })
+						details: 
+							(or (objFireEvent shipObj 'GetShipDetails { })
+								(rpgGetShipDetails shipObj { })
+								)
+
+						shipObj: shipObj
+						}
+						)
+					)
+			</OnDisplayInit>
+		</Display>
+
+		<Panes>
+			<Default>
+				<OnPaneInit>
+					(switch
+						
+						;	No selection
+
+						(not (scrGetListEntry gScreen))
+							(block ()
+								(scrSetDescTranslate gScreen 'descNoShipsForSale)
+								(scrEnableAction gScreen 'actionBuyShip Nil)
+								(scrShowAction gScreen 'actionBuyForWingman Nil)
+								)
+
+						;	Ship selected
+
+						(block (
+							(brokerSource (typ@ &ADT_vtShipBroker; 'ADT.getInstance))
+							(theEntry (scrGetListEntry gScreen))
+							(selObj (@ theEntry 'shipObj))
+							(currency (obj@ brokerSource 'currency))
+						
+							;	Compute some prices
+						
+							(playerBalance (objGetBalance gPlayerShip currency))
+							(playerShipPrice (or (objGetShipBuyPrice brokerSource gPlayerShip) 0))
+							(newShipPrice (objGetShipSellPrice brokerSource selObj))
+							(tradeInPrice (- newShipPrice playerShipPrice))
+						
+							;	Compute some descriptions
+						
+							(newShipDesc (obj@ selObj 'playerDesc))
+
+							;	Wingmen
+						
+							(allWingmen (sysFindObject gPlayerShip "s +property:playerWingman; +property:character;"))
+							(validWingmen Nil)
+
+							;	Vars
+						
+							(canBuy Nil)
+							(canUpgradeResult Nil)
+							(militaryCheck Nil)
+							)
+						
+							;	Set the description
+						
+							(scrSetDesc gScreen
+								(if (geq tradeInPrice 0)
+									(scrTranslate gScreen 'descPrices {
+										fullPrice: (fmtCurrency currency newShipPrice)
+										playerShipPrice: (fmtCurrency currency playerShipPrice)
+										tradeInPrice: (fmtCurrency currency tradeInPrice)
+										})
+									(scrTranslate gScreen 'descPricesRebate {
+										fullPrice: (fmtCurrency currency newShipPrice)
+										playerShipPrice: (fmtCurrency currency playerShipPrice)
+										tradeInRebate: (fmtCurrency currency (- tradeInPrice))
+										})
+									)
+
+								"\n"
+								"\n"
+
+								newShipDesc
+								)
+
+							;	See if the player can upgrade to this ship.
+
+							(switch
+
+								;	See if the ship can be traded
+
+								(!= (setq canUpgradeResult (objFireEvent gPlayerShip 'CanUpgradeTo { newShipObj:selObj })) True)
+									(block ()
+										(scrEnableAction gScreen 'actionBuyShip Nil)
+										(scrSetActionDesc gScreen 'actionBuyShip canUpgradeResult)
+										)
+
+								(!= (setq canUpgradeResult (objFireEvent selObj 'CanUpgradeFrom { oldShipObj:gPlayerShip })) True)
+									(block ()
+										(scrEnableAction gScreen 'actionBuyShip Nil)
+										(scrSetActionDesc gScreen 'actionBuyShip canUpgradeResult)
+										)
+
+								;	If a military ID is required, check
+
+								(and (objHasAttribute selObj 'military)
+										(!= (setq militaryCheck (rpgCheckMilitaryIDPolicy brokerSource (@ gData 'checkMilitaryID))) True)
+										)
+									(block ()
+										(scrEnableAction gScreen 'actionBuyShip Nil)
+										(scrSetActionDesc gScreen 'actionBuyShip (scrTranslate gScreen 'descNeedMilitaryID {
+											militaryID: (@ militaryCheck 'idName)
+											}))
+										)
+
+								;	If the player cannot afford the ship, then say so
+
+								(gr tradeInPrice (objGetBalance gPlayerShip currency))
+									(block ()
+										(scrEnableAction gScreen 'actionBuyShip Nil)
+										(scrSetActionDesc gScreen 'actionBuyShip (scrTranslate gScreen 'descCantAffordToBuy))
+										)
+
+								;	If we have too much cargo, then say so
+
+								(gr (obj@ gPlayerShip 'cargoSpaceUsedKg) (obj@ selObj 'cargoSpaceFreeKg))
+									(block ()
+										(scrEnableAction gScreen 'actionBuyShip Nil)
+										(scrSetActionDesc gScreen 'actionBuyShip (scrTranslate gScreen 'descTooMuchCargo))
+										)
+
+								;	If we get a rebate
+
+								(ls tradeInPrice 0)
+									(scrSetActionDesc gScreen 'actionBuyShip (scrTranslate gScreen 'descBuyShipRebate { price: (fmtCurrency currency (- tradeInPrice)) }))
+
+								;	Allow buy
+
+								(block ()
+									(scrSetActionDesc gScreen 'actionBuyShip (scrTranslate gScreen 'descBuyShip { price: (fmtCurrency currency tradeInPrice) }))
+									)
+								)
+
+							;	If we have wingmen, then enable the button to buy a ship for wingmen
+
+							(switch
+								(not allWingmen)
+									(scrShowAction gScreen 'actionBuyForWingman Nil)
+
+								;	If a military ID is required, check
+
+								(and (objHasAttribute selObj 'military)
+										(!= (setq militaryCheck (rpgCheckMilitaryIDPolicy brokerSource (@ gData 'checkMilitaryID))) True)
+										)
+									(block ()
+										(scrEnableAction gScreen 'actionBuyForWingman Nil)
+										(scrSetActionDesc gScreen 'actionBuyForWingman (scrTranslate gScreen 'descNeedMilitaryID {
+											militaryID: (@ militaryCheck 'idName)
+											}))
+										)
+
+								;	If none of the wingmen want this ship
+
+								(not (setq validWingmen
+										(filter allWingmen wingmateObj
+											(and (= (objFireEvent wingmateObj 'CanUpgradeTo { newShipObj:selObj }) True)
+												(= (objFireEvent selObj 'CanUpgradeFrom { oldShipObj:wingmateObj }) True)
+												)
+											)
+										))
+									(block ()
+										(scrEnableAction gScreen 'actionBuyForWingman Nil)
+										(scrSetActionDesc gScreen 'actionBuyForWingman (scrTranslate gScreen 'descAllWingmenRefuse))
+										)
+
+								;	See if we can afford it
+
+								(not (filter validWingmen wingmateObj
+										(geq (objGetBalance gPlayerShip currency)
+											(- newShipPrice (or (objGetShipBuyPrice brokerSource wingmateObj) 0))
+											)
+										))
+									(block ()
+										(scrEnableAction gScreen 'actionBuyForWingman Nil)
+										(scrSetActionDesc gScreen 'actionBuyForWingman (scrTranslate gScreen 'descCantAffordForWingmen))
+										)
+
+								;	OK
+
+								(block ()
+									(scrShowAction gScreen 'actionBuyForWingman True)
+									(scrSetActionDesc gScreen 'actionBuyForWingman (scrTranslate gScreen 'descBuyForWingman))
+									)
+								)
+
+							;	Remember some calculations
+						
+							(scrSetData gScreen 'buyPrice newShipPrice)
+							(scrSetData gScreen 'tradeInPrice tradeInPrice)
+							(scrSetData gScreen 'playerShipPrice playerShipPrice)
+							)
+						)
+				</OnPaneInit>
+				
+				<Actions>
+					<Action id="actionBuyShip">
+						(block (
+							(theEntry (scrGetListEntry gScreen))
+							(selObj (@ theEntry 'shipObj))
+							)
+							(scrShowScreen gScreen &ADT_dsShipBrokerConfirm; {
+								newShipID: (objGetID selObj)
+								newShipPrice: (scrGetData gScreen 'buyPrice)
+								oldShipID: (objGetID gPlayerShip)
+								oldShipPrice: (scrGetData gScreen 'playerShipPrice)
+								price: (scrGetData gScreen 'tradeInPrice)
+								})
+							)
+					</Action>
+
+					<Action id="actionBuyForWingman">
+						(block (
+							(brokerSource (typ@ &ADT_vtShipBroker; 'ADT.getInstance))
+							(theEntry (scrGetListEntry gScreen))
+							(selObj (@ theEntry 'shipObj))
+							(allWingmen (sysFindObject gPlayerShip "s +property:playerWingman; +property:character;"))
+							(wingmateObj (if (= (count allWingmen) 1) (@ allWingmen 0)))
+							(wingmatePrice (or (objGetShipBuyPrice brokerSource wingmateObj) 0))
+							)
+							(switch
+								;	If we only have a single wingmate, then go directly to the
+								;	confirm screen.
+
+								wingmateObj
+									(scrShowScreen gScreen &ADT_dsShipBrokerConfirm; {
+										newShipID: (objGetID selObj)
+										newShipPrice: (scrGetData gScreen 'buyPrice)
+										oldShipID: (objGetID wingmateObj)
+										oldShipPrice: wingmatePrice
+										price: (- (scrGetData gScreen 'buyPrice) wingmatePrice)
+										})
+
+								;	Otherwise, we need to select a wingmate
+
+								(scrShowScreen gScreen &ADT_dsShipBrokerwingmate; {
+									newShipID: (objGetID selObj)
+									price: (scrGetData gScreen 'buyPrice)
+									})
+								)
+							)
+					</Action>
+
+					<Action id="actionDone" cancel="1">
+						(scrExitScreen gScreen)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+	<DockScreen unid="&ADT_dsShipBrokerConfirm;"
+			inherit=			"&dsRPGShipBrokerConfirm;"
+			nestedScreen=		"true"
+			>
+
+		<!-- SHIP BROKER CONFIRM
+
+			DATA
+
+			newShipID: ID of ship being sold
+			oldShipID: ID of ship being traded in
+			newShipPrice: Price of new ship
+			oldShipPrice: Price of old ship
+			price: Price of trade in (may be negative if we're paying the player)
+
+		-->
+		<Display type="carouselSelector"
+				style="shipCompare"
+				>
+			<OnDisplayInit>
+				(map (list (@ gData 'oldShipID) (@ gData 'newShipID)) shipID 
+					(block (
+						(shipObj (objGetObjByID shipID))
+						(shipClass (objGetType shipObj))
+						)
+						{
+						title: (objGetName shipObj '(generic titleCapitalize))
+						icon: (shpGetImageDesc shipClass { rotation:90 })
+
+						largeIcon: (shpGetImageDesc shipClass { type:'schematic })
+						details:
+							(or (objFireEvent shipObj 'GetShipDetails { })
+								(rpgGetShipDetails shipObj { })
+								)
+
+						shipObj: shipObj
+						})
+					)
+			</OnDisplayInit>
+		</Display>
+
+		<Panes>
+			<Default>
+				<OnPaneInit>
+					(block (
+						(brokerObj (typ@ &ADT_vtShipBroker; 'ADT.getInstance))
+						(currency (obj@ brokerObj 'currency))
+
+						(newShipObj (objGetObjByID (@ gData 'newShipID)))
+						(newShipPrice (@ gData 'newShipPrice))
+						(oldShipObj (objGetObjByID (@ gData 'oldShipID)))
+						(oldShipPrice (@ gData 'oldShipPrice))
+						(price (@ gData 'price))
+
+						(oldShipName
+							(switch
+								(= oldShipObj gPlayerShip)
+									(scrTranslate gScreen 'phraseYourShip)
+
+								(scrTranslate gScreen 'phraseWingmanShip { name:(objGetName oldShipObj) className:(objGetName oldShipObj 'generic) })
+								)
+							)
+
+						(canTrade Nil)
+						(confirmDesc Nil)
+						(result Nil)
+						)
+
+						;	See if we can trade this ship
+
+						(switch
+							;	If we cannot afford this ship, then gray out
+
+							(gr price (objGetBalance gPlayerShip currency))
+								(block ()
+									(setq confirmDesc (scrTranslate gScreen 'descCantAfford))
+									)
+
+							;	If we're trading our own ship...
+
+							(= oldShipObj gPlayerShip)
+								(block ()
+									(setq confirmDesc (scrTranslate gScreen 'descTradeYourShipConfirm {
+										newShipName:(objGetName newShipObj 'article)
+										}))
+									(setq canTrade True)
+									)
+
+							;	Ask the wingmate if they want the trade. If not, then we fail
+
+							(!= (setq result (objFireEvent oldShipObj 'CanUpgradeTo { newShipObj:newShipObj })) True)
+								(block ()
+									(setq confirmDesc result)
+									)
+
+							;	Ask the new class if it is allowed to replace the wingmate
+
+							(!= (setq result (objFireEvent newShipObj 'CanUpgradeFrom { oldShipObj:oldShipObj })) True)
+								(block ()
+									(setq confirmDesc result)
+									)
+
+							;	wingmate has too much cargo
+
+							(gr (obj@ oldShipObj 'cargoSpaceUsedKg) (obj@ newShipObj 'cargoSpaceFreeKg))
+								(setq confirmDesc (scrTranslate gScreen 'descTooMuchCargo {
+									wingmateName:(objGetName oldShipObj 0)
+									newShipName:(objGetName newShipObj 'article)
+									}))
+
+							;	Otherwise, we're trading one of our wingmates...
+
+							(block ()
+								(setq confirmDesc (scrTranslate gScreen 'descTradeWingmanShipConfirm {
+									wingmateName:(objGetName oldShipObj 0)
+									newShipName:(objGetName newShipObj 'article)
+									}))
+								(setq canTrade True)
+								)
+							)
+
+						;	If we're getting a refund, then warn the player that this ship might be worse
+
+						(if (and canTrade (ls price 0))
+							(scrSetControlValue gScreen 'descWarning (scrTranslate gScreen 'descTooCheapWarning))
+							)
+
+						;	Set the description
+						
+						(scrSetDesc gScreen
+							(switch
+								(= oldShipPrice 0)
+									(scrTranslate gScreen 'descPricesNoTradeIn {
+										fullPrice: (fmtCurrency currency price)
+										oldShipName: oldShipName
+										})
+
+								(ls price 0)
+									(scrTranslate gScreen 'descPricesRefund {
+										fullPrice: (fmtCurrency currency newShipPrice)
+										oldShipName: oldShipName
+										oldShipPrice: (if oldShipPrice (fmtCurrency currency oldShipPrice) "N/A")
+										tradeInPrice: (if oldShipPrice (fmtCurrency currency (- price)) "N/A")
+										})
+									
+								(scrTranslate gScreen 'descPrices {
+									fullPrice: (fmtCurrency currency newShipPrice)
+									oldShipName: oldShipName
+									oldShipPrice: (if oldShipPrice (fmtCurrency currency oldShipPrice) "N/A")
+									tradeInPrice: (if oldShipPrice (fmtCurrency currency price) "N/A")
+									})
+								)
+
+							"\n\n"
+
+							confirmDesc
+							)
+
+						;	Enable action
+
+						(scrEnableAction gScreen 'actionConfirm canTrade)
+						)
+				</OnPaneInit>
+
+				<Controls>
+					<Text id="desc"/>
+					<Text id="descWarning" style="warning"/>
+				</Controls>
+
+				<Actions>
+					<Action id="actionConfirm" default="1">
+						(block (
+							(brokerObj (typ@ &ADT_vtShipBroker; 'ADT.getInstance))
+							(selObj (objGetObjByID (@ gData 'newShipID)))
+
+							(currency (obj@ brokerObj 'currency))
+							(tradeInPrice (@ gData 'price))
+							
+							(shipIDList (objGetData brokerObj 'shipBroker.list))
+							
+							(oldShip (objGetObjByID (@ gData 'oldShipID)))
+							(spawnPos (objGetPos oldShip))
+							)
+							
+							;;	Move all the cargo from the old ship to the new ship
+							
+							(enum (objGetItems oldShip "*U") theItem
+								(block ()
+									(objRemoveItem oldShip theItem)
+									(objAddItem selObj theItem)
+									)
+								)
+								
+							;;	Remove the ship from our list of ships to sell
+							
+							(setq shipIDList (filter shipIDList theID (!= theID (objGetID selObj))))
+							(objSetData brokerObj 'shipBroker.list shipIDList)
+							
+							;;	Charge the player
+							
+							(if (geq tradeInPrice 0)
+								(objCharge gPlayerShip currency tradeInPrice)
+								(objCredit gPlayerShip currency (- tradeInPrice))
+								)
+								
+							;;	Trade ships
+							
+							(objResume selObj)
+							(switch
+								(= oldShip gPlayerShip)
+									(block ()
+										(plyChangeShip gPlayer selObj {
+											transferEquipment: True
+											})
+
+										;	Achievement
+
+										(unvSetAchievement 'core.newShip)
+										)
+
+								(rpgChangeWingmanShip oldShip selObj)
+								)
+
+							;;	Identify all the installed devices on the new ship
+
+							(enum (objGetItems selObj "adI") theItem
+								(itmSetKnown theItem)
+								)
+								
+							;;	Position the new ship where the old ship was
+							
+							(objSetPos selObj spawnPos)
+
+							;;	Remove the old ship
+							
+							(objRemove oldShip)
+								
+							(scrExitScreen gScreen 'forceUndock)
+							)
+					</Action>
+
+					<Action id="actionCancel" cancel="1">
+						(scrExitScreen gScreen)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+	<DockScreen unid="&ADT_dsShipBrokerWingmate;"
+			inherit=			"&dsRPGShipBrokerWingman;"
+			nestedScreen=		"true"
+			>
+
+		<!-- SHIP BROKER WINGMATE
+
+			DATA
+
+			newShipID: ID of ship being sold
+			price: Price for ship being sold
+
+		-->
+		<Display type="customPicker"
+				rowHeight="80"
+				iconWidth="80"
+				iconHeight="80"
+				>
+			<OnDisplayInit>
+				(map (sysFindObject gPlayerShip "s +property:playerWingman; +property:character | s +property:playerWingmate; +property:character") wingmateObj
+					(block
+						(
+							(brokerObj (typ@ &ADT_vtShipBroker; 'ADT.getInstance))
+							(currency (obj@ brokerObj 'currency))
+							(wingmateClass (objGetType wingmateObj))
+							(wingmatePrice (or (objGetShipBuyPrice brokerObj wingmateObj) 0))
+						)
+						{
+						title: (objGetName wingmateObj 'titleCapitalize)
+						icon: (shpGetImageDesc wingmateObj { rotation:90 })
+						desc: 
+							(scrTranslate gScreen 'descWingmanPrice {
+								shipClass:(objGetName wingmateObj 'generic)
+								price:(fmtCurrency currency wingmatePrice)
+								})
+
+						wingmateID: (objGetID wingmateObj)
+						wingmatePrice: wingmatePrice
+						}
+						)
+					)
+			</OnDisplayInit>
+		</Display>
+		
+		<Panes>
+			<Default>
+				<OnPaneInit>
+					(block
+						(
+							(brokerObj (typ@ &ADT_vtShipBroker; 'ADT.getInstance))
+							(theEntry (scrGetListEntry gScreen))
+							(oldShipObj (objGetObjByID (@ theEntry 'wingmateID)))
+							(newShipObj (objGetObjByID (@ gData 'newShipID)))
+							(tradeInPrice (- (@ gData 'price) (@ theEntry 'wingmatePrice)))
+							(currency (obj@ brokerObj 'currency)
+						)
+
+						(introDesc (scrTranslate gScreen 'descOffer {
+							wingmateName: (objGetName oldShipObj 0)
+							newShipName: (objGetName newShipObj '(article generic))
+							currency: currency
+							price: tradeInPrice
+							}))
+
+						(result Nil)
+						)
+						(switch
+							;	Ask the wingmate if they want the trade. If not, then we fail
+
+							(!= (setq result (objFireEvent oldShipObj 'CanUpgradeTo { newShipObj:newShipObj })) True)
+								(block ()
+									(scrEnableAction gScreen 'actionBuyFor Nil)
+									(scrSetDesc gScreen introDesc
+										"\n\n"
+										result
+										)
+									)
+
+							;	Ask the new class if it is allowed to replace the wingmate
+
+							(!= (setq result (objFireEvent newShipObj 'CanUpgradeFrom { oldShipObj:oldShipObj })) True)
+								(block ()
+									(scrEnableAction gScreen 'actionBuyFor Nil)
+									(scrSetDesc gScreen introDesc
+										"\n\n"
+										result
+										)
+									)
+
+							;	If we cannot afford it
+
+							(ls (objGetBalance gPlayerShip currency) tradeInPrice)
+								(block ()
+									(scrEnableAction gScreen 'actionBuyFor Nil)
+									(scrSetDesc gScreen introDesc
+										"\n\n"
+										(scrTranslate gScreen 'descCantAfford)
+										)
+									)
+
+							;	wingmate has too much cargo
+
+							(gr (obj@ oldShipObj 'cargoSpaceUsedKg) (obj@ newShipObj 'cargoSpaceFreeKg))
+								(block ()
+									(scrEnableAction gScreen 'actionBuyFor Nil)
+									(scrSetDesc gScreen introDesc
+										"\n\n"
+										(scrTranslate gScreen 'descTooMuchCargo {
+											wingmateName:(objGetName oldShipObj 0)
+											newShipName:(objGetName newShipObj 'article)
+											})
+										)
+									)
+
+							;	OK
+
+							(block ()
+								(scrSetDesc gScreen introDesc)
+								)
+							)
+						)
+				</OnPaneInit>
+
+				<Actions>
+					<Action id="actionBuyFor" default="1">
+						(block (
+							(theEntry (scrGetListEntry gScreen))
+							(confirmData {
+								newShipID: (@ gData 'newShipID)
+								newShipPrice: (@ gData 'price)
+								oldShipID: (@ theEntry 'wingmateID)
+								oldShipPrice: (@ theEntry 'wingmatePrice)
+								price: (- (@ gData 'price) (@ theEntry 'wingmatePrice))
+								})
+							)
+							;	Exit this screen because we don't want to come back to it.
+
+							(scrExitScreen gScreen)
+
+							;	Confirm
+
+							(scrShowScreen gScreen &ADT_dsShipBrokerConfirm; confirmData)
+							)
+					</Action>
+					<Action id="actionCancel" cancel="1">
+						(scrExitScreen gScreen)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+
+	<!-- Dock Screen for toggling ship software -->
+	
+	<DockScreen UNID="&ADT_dsSoftwareMain;"
+			name=				"Arisaya Debug Tools: Ship Software"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayPickerList ADT_uiSoftwareMenuOptions)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+    <!-- Stations -->
+	<StationType UNID="&ADT_vtShipBroker;"
+			virtual=			"true"
+			sovereign=			"&ADT_svCreateObjectNullSov;"
+			>
+		<Properties>
+			;;	These are for managing the instances of vtShipBroker across all systems
+			<DynamicGlobal	id="ADT.getInstance">
+				(block
+					(
+						(thisInstanceID (@ (typ@ gType 'ADT.sysInstances) (sysGetNode)))
+					)
+					(if thisInstanceID
+						
+						;;	Return our ID for this system
+
+						(objGetObjByID thisInstanceID)
+
+						;;	Otherwise we need to create an instance for this system
+						;;	and return it
+
+						(block
+							(
+								(sysInstances (typ@ gType 'ADT.sysInstances))
+								(sysInstance (sysCreateStation gType ()))
+								(sysInstanceID (objGetId sysInstance))
+							)
+
+							(set@ sysInstances (sysGetNode) sysInstanceID)
+
+							;;	We really need to check at some point of this was being
+							;;	edited in place the entire time...
+
+							(typSet@ gType 'ADT.sysInstances sysInstances)
+
+							;;	Return the instance
+
+							sysInstance
+						)
+					)
+				)
+			</DynamicGlobal>
+			<Global			id="ADT.sysInstances">
+				{}
+			</Global>
+			<Global			id="ADT.sysPendingCleanup">(list)</Global>
+			;;	we show all ships
+			<Constant		id="rpg.shipBrokerCriteria">"s +shipBroker;"</Constant>
+			;;	we need to create all broker ships here
+			<DynamicData	id="rpg.shipBrokerInventory">
+				(block
+					(
+						(sellerObj gSource)
+						(shipIDList (objGetData sellerObj 'shipBroker.list))
+					)
+				
+					(if (not shipIDList)
+				
+						;;	If there are no ships in our list, then we need to create some
+
+						(block
+							(
+								(shipObj Nil)
+								(shipList Nil)
+								(shipIDList Nil)
+
+								;;	Make a list of all possible ship classes that we sell.
+
+								(createCriteria (or 
+									(obj@ sellerObj 'rpg.shipBrokerCriteria)
+									createCriteriaArg
+									"s +shipBroker;"
+									))
+
+								(allClasses (typFind createCriteria))
+							)
+
+							;;	Create a list of ships to sell
+							
+							(setq shipList
+								(map allClasses 'excludeNil theClass
+
+									;;	Create a ship of this class
+
+									(if (setq shipObj (sysCreateShip theClass (objGetPos sellerObj) (objGetSovereign sellerObj)))
+								
+										;;	Return it if creation was successful
+									
+										shipObj
+										)
+									)
+								)
+								
+							;;	Suspend the ships
+							
+							(enum shipList shipObj (objSuspend shipObj))
+							
+							;;	Store the list of ID with the seller object
+							
+							(setq shipIDList (map shipList shipObj (objGetID shipObj)))
+							(objSetData sellerObj 'shipBroker.list shipIDList)
+							
+							;;	Return it
+							
+							shipIDList
+						)
+
+						;;	otherwise we just return the existing list
+
+						shipIDList
+					)
+				)
+			</DynamicData>
+		</Properties>
+
+		<Trade currency="credit">
+			;;	we do this for free
+			<SellShip		criteria="*" priceAdj="0"/>
+			<BuyShip		criteria="*" priceAdj="0"/>
+		</Trade>
+
+		<Events>
+			<onCreate>
+				() ;;	disabled for now
+			</onCreate>
+			<ADT.OnCreateCheck>
+				(if (!=== (typ@ gType 'ADT.getInstance) gSource)
+					(block ()
+						(lnkAppend (typ@ gType 'ADT.sysPendingCleanup) (objGetID gSource))
+
+						;;	we have to do a deferred removal because removing gSource in onCreate is dangerous for non-missions
+
+						(typAddTimerEvent gType 1 'ADT.Cleanup)
+					)
+				)
+			</ADT.OnCreateCheck>
+			<ADT.Cleanup>
+				;;	this runs at the type level
+				(
+					(
+						(pendingCleanup (typ@ gType 'ADT.sysPendingCleanup))
+					)
+					(enum pendingCleanup pendingObjId (objRemove (objGetObjByID pendingObjId)))
+					(typSet@ gType 'ADT.sysPendingCleanup (list))
+				)
+			</ADT.Cleanup>
+			<ADT.Reset>
+				(block ()
+					(enum (objGetData gSource 'shipBroker.list) theShipID (objRemove (objGetObjByID theShipID)))
+					(objSetData gSource 'shipBroker.list ())
+				)
+			</ADT.Reset>
+		</Events>
+	</StationType>
+
+    <!-- Helper Types -->
+
+	<Type UNID="&ADT_vvRespawnHelper;">
+		<Events>
+			<GetGlobalResurrectPotential>
+				(switch
+					;	Resurrect if we have resurrect mode enabled
+					(typGetGlobalData &ADT_vvRespawnHelper; "RespawnMode")
+						100
+					
+					;	otherwise no respawn
+					0
+					)
+			</GetGlobalResurrectPotential>
+			<OnGlobalResurrect>
+				(block (rescueObj)
+
+					; Restore the ship					
+					(switch
+						; If the player ship has custom insurance code, then we 
+						; don't do anything more.
+						(objFireEvent gPlayerShip 'OnInsuranceClaim)
+							()
+						
+						; Put the player in a safe place and repair the ship
+						(rpgRestorePlayer {
+							portObj: (sysFindObject gPlayerShip "TAFN +populated; +majorStation;")
+							})
+						)
+
+					; Create a rescue ship nearby
+					(setq rescueObj (sysCreateShip 
+						&scMikeno; 
+						(sysVectorRandom gPlayerShip 5 5 "TA")
+						&svIndependent;
+						))
+
+					(shpOrder rescueObj 'wait () 5)
+					(shpOrder rescueObj 'gate)
+					(if
+						(typGetGlobalData &ADT_vvTravelHelper; "SystemsLeft")
+						(block ()
+							;;	send funny message if player got killed while in gate mode
+							(objSendMessage gPlayerShip rescueObj "Oops, that could have gone better! Safe travels!")
+							;;	resume travel after resurrect finishes
+							(typAddTimerEvent &ADT_vvTravelHelper; 40 'TravelToNextSystem)
+						)
+						;;	otherwise just respawn them
+						(objSendMessage gPlayerShip rescueObj "Enjoy your complimentary debug respawn!")
+					)
+				)
+			</OnGlobalResurrect>
+		</Events>
+	</Type>
+
+	<!-- Overlays -->
+
+	<OverlayType UNID="&ADT_ovImmunity;"
+			name=			"(ADT Damage Immunity)"
+			attributes=	 "ADT_debug"
+			virtual=		"true"
+
+			absorbAdj=		"100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100"
+			>
+		<HitEffect altEffect="true"/>
+		<Events>
+			<OnDamage>0</OnDamage> ;;Block scripts from dealing damage
+			<OnUpdate>
+				(ADT_shipRestoreAll)	;;	fix any problems with the ship
+			</OnUpdate>
+		</Events>
+	</OverlayType>
+
+	<OverlayType UNID="&ADT_ovRefuel;"
+			name=			"(ADT Autofuel)"
+			attributes=	 "ADT_debug"
+			virtual=		"true"
+			>
+		<Events>
+			<OnCreate>
+				(ADT_fuelSustain)	;;	running it once initializes it
+			</OnCreate>
+			<OnUpdate>
+				(ADT_fuelSustain)
+			</OnUpdate>
+		</Events>
+	</OverlayType>
+
+	<!-- Global Loader Types -->
+
+    <Type UNID="&ADT_vvGlobalLoaderPlayer;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+        <Properties>
+            <Definition id="adt.loader.dependencies">
+				(list
+					&ADT_vvGlobalLoaderUI;
+				)
+			</Definition>
+        </Properties>
+        <Events>
+            <ADT.onLoadGlobals>
+                (block ()
+
+                    ;   Global constants
+
+                    ;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Econ Info and Spawning
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	calculate economy relative to credits
+					(setq ADT_econCalcRatio (lambda (econType)
+						(switch
+							(gr (itmGetPrice &ADT_itPriceRef100; econType) 0)
+								(/ 10000 (itmGetPrice &ADT_itPriceRef100; econType))
+							(gr (itmGetPrice &ADT_itPriceRef10000; econType) 0)
+								(/ 1000000 (itmGetPrice &ADT_itPriceRef10000; econType))
+							;;	default
+								(/ 100000000 (itmGetPrice &ADT_itPriceRef1000000; econType))
+						)
+					))
+
+					;;	Sort Economies
+					(setq ADT_sortKeyEcons (lambda (econType)
+						(cat
+							"\nVAL_RATIO:"
+							(hex (ADT_econCalcRatio econType) 8)
+							"\nNAME:"
+							(typGetName econType)
+							"\nUNID:"
+							(hex econType 8)
+						)
+					))
+
+					;;	Econ menu
+					(setq ADT_econMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsEconomySelector;)))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Item Info and Spawning
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Sort Items
+					(setq ADT_sortKeyItem (lambda (itmType)
+						(cat
+							"TYPE_PRIORITY:"
+							(hex (ADT_itmCategoryPriority (itmGetCategory itmType)) 8)
+							;;	only add in the redudant type if we have the debug display activated
+							(if (typGetData &ADT_dsItemsMain; 'sortKeyDisplay)
+								(cat
+									"\nTYPE:"
+									(hex (itmGetCategory itmType) 8)
+								)
+								""
+							)
+							"\nLEVEL:"
+							(hex (itmGetLevel itmType) 2)
+							"\nNAME:"
+							(itmGetName itmType)
+							"\nUNID:"
+							(hex itmType 8)
+						)
+					))
+
+					;;	Convert item category into a sort subkey
+					(setq ADT_itmCategoryPriority (lambda (c) ;;	category int
+						;;	see ItemCategories CItemType::GetCategory (void) in CItemType.cpp
+						(switch
+							(ADT_bitTrue c 2)	;;	0x4 Primary weapons
+								0
+							(ADT_bitTrue c 4)	;;	0x10 Launchers
+								1
+							(ADT_bitTrue c 10)	;;	0x400 Ammo
+								2
+							(ADT_bitTrue c 7)	;;	0x80 Shields
+								3
+							(ADT_bitTrue c 1)	;;	0x2 Armor
+								4
+							(ADT_bitTrue c 11)	;;	0x800 Drives
+								5
+							(ADT_bitTrue c 6)	;;	0x40 Reactors
+								6
+							(ADT_bitTrue c 9)	;;	0x200 Fuel
+								7
+							(ADT_bitTrue c 8)	;;	0x100 Cargo expansion device
+								8
+							(ADT_bitTrue c 3)	;;	0x8 Misc Devices
+								9
+							(ADT_bitTrue c 12)	;;	0x1000 usable items
+								10
+							(ADT_bitTrue c 0)	;;	0x1 General items with no object UNID
+								0xFFFFFFFE
+							;;	Uncategorized item
+							0xFFFFFFFF
+						)
+					))
+
+					;;	Item menu
+					(setq ADT_itmMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsItemsMain;)))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Ship utility functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Clear status effects
+					(setq ADT_shipClearStatusEffects (lambda (ship) (block ()
+						;;	Note later in 2.0 this section will need to be revised for status effects 2.0
+						;;	fix HUD
+						(objChangeEquipmentStatus ship 'SRS 'repair)
+						;;	remove radiation
+						(shpDecontaminate ship)
+						;;	remove ionization
+						(objFixParalysis ship)
+						;;	remove disrupted from items
+						(objEnumItems ship "*IV" thisItem (objSetItemProperty ship thisItem 'disrupted ()))
+						;;	remove any overlays that get removed by respawning
+						(enum (objGetOverlays ship) theOverlay (objFireOverlayEvent ship theOverlay "OnInsuranceClaim"))
+					)))
+
+					(setq ADT_shipRepairDevices (lambda (ship) (objEnumItems ship "*~a DIV" theItem (shpRepairItem ship theItem))))
+
+					;;	Repair armor
+					(setq ADT_shipRepairArmor (lambda (ship) (intArmorRepairAll ship 25 'alwaysRepair)))
+
+					;;	Recharge shield
+					(setq ADT_shipRechargeShield (lambda (ship) (block
+						(
+							(theShield (@ (objGetItems ship "sI") 0))
+						)
+						(if (objIsDeviceEnabled ship theShield)
+							(shpRechargeShield ship ADT_giantInt)
+						)
+					)))
+
+					;;	Repair hull
+					(setq ADT_shipRepairHull (lambda (ship) (block
+						(
+							(maxHullHP (objGetProperty ship 'maxInteriorHP))
+							(curHullHP (objGetProperty ship 'interiorHP))
+						)
+						(if (ls curHullHP maxHullHP)
+							(objSetProperty ship 'interiorHP maxHullHP)
+						)
+					)))
+
+					;;	Restore ship
+					(setq ADT_shipRestoreAll (lambda (ship) (block ()
+						(ADT_shipRepairHull ship)
+						(ADT_shipRepairArmor ship)
+						(ADT_shipRechargeShield ship)
+						(ADT_shipClearStatusEffects ship)
+					)))
+
+					;;	Restore playership
+					(setq ADT_shipRestorePlayerAll (lambda () (block ()
+						(ADT_shipRestoreAll gPlayerShip)
+						(ADT_fuelRefill)
+					)))
+
+					;;	Restore target
+					(setq ADT_shipRestoreTargetAll (lambda () (ADT_shipRestoreAll (objGetTarget gPlayerShip))))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Player ship software functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	toggle software
+					(setq ADT_softwareToggle (lambda (software) (block
+						(
+							(curStatus (objGetEquipmentStatus gPlayerShip software))
+							(bNeedRepair (eq curStatus 'damaged))
+							(command (if (eq curStatus 'ready) 'remove 'install))
+						)
+						(if bNeedRepair
+							(objChangeEquipmentStatus gPlayerShip software 'repair)
+							(objChangeEquipmentStatus gPlayerShip software command)
+						)
+					)))
+
+					;;	get ui name for status
+					(setq ADT_softwareUIStatus (lambda (software) (block
+						(
+							(curStatus (objGetEquipmentStatus gPlayerShip software))
+						)
+						(switch
+							(= curStatus 'damaged)
+								"Damaged"
+							(= curStatus 'ready)
+								"Installed"
+							"Not Installed"
+						)
+					)))
+
+					;;	toggle autopilot
+					(setq ADT_softwareToggleAutopilot (lambda () (ADT_softwareToggle 'Autopilot)))
+
+					;;	toggle autopilot menu text
+					(setq ADT_softwareToggleAutopilotMenuText (lambda () (cat "Toggle Autopilot (Currently: " (ADT_softwareUIStatus 'Autopilot) ")")))
+
+					;;	toggle system map
+					(setq ADT_softwareToggleMapSystem (lambda () (ADT_softwareToggle 'SystemMap)))
+
+					;;	toggle system map menu text
+					(setq ADT_softwareToggleMapSystemMenuText (lambda () (cat "Toggle System Map (Currently: " (ADT_softwareUIStatus 'SystemMap) ")")))
+
+					;;	toggle galactic map
+					(setq ADT_softwareToggleMapGalactic (lambda () (ADT_softwareToggle 'GalacticMap)))
+
+					;;	toggle system map menu text
+					(setq ADT_softwareToggleMapGalacticMenuText (lambda () (cat "Toggle Galaxy Map (Currently: " (ADT_softwareUIStatus 'GalacticMap) ")")))
+
+					;;	toggle friendly fire lock
+					(setq ADT_softwareToggleFriendlyFireLock (lambda () (ADT_softwareToggle 'FriendlyFireLock)))
+
+					;;	toggle friendly fire lock menu text
+					(setq ADT_softwareToggleFriendlyFireLockMenuText (lambda () (cat "Toggle Friendly Fire Lock (Currently: " (ADT_softwareUIStatus 'FriendlyFireLock) ")")))
+					
+					;;	toggle short range scanner
+					(setq ADT_softwareToggleSRS (lambda () (ADT_softwareToggle 'SRS)))
+
+					;;	toggle short range scanner menu text
+					(setq ADT_softwareToggleSRSMenuText (lambda () (cat "Toggle Short Range Scanner (Currently: " (ADT_softwareUIStatus 'SRS) ")")))
+					
+					;;	toggle enhanced short range scanner
+					(setq ADT_softwareToggleSRSE (lambda () (ADT_softwareToggle 'SRSEnhancer)))
+
+					;;	toggle enhanced short range scanner menu text
+					(setq ADT_softwareToggleSRSEMenuText (lambda () (cat "Toggle Short Range Scanner Enhancer (Currently: " (ADT_softwareUIStatus 'SRSEnhancer) ")")))
+					
+					;;	toggle long range scanner
+					(setq ADT_softwareToggleLRS (lambda () (ADT_softwareToggle 'LRS)))
+
+					;;	toggle long range scanner menu text
+					(setq ADT_softwareToggleLRSMenuText (lambda () (cat "Toggle Long Range Scanner (Currently: " (ADT_softwareUIStatus 'LRS) ")")))
+					
+					;;	toggle computer mining
+					(setq ADT_softwareToggleCompMining (lambda () (ADT_softwareToggle 'MiningComputer)))
+
+					;;	toggle computer mining menu text
+					(setq ADT_softwareToggleCompMiningMenuText (lambda () (cat "Toggle Mining Computer (Currently: " (ADT_softwareUIStatus 'MiningComputer) ")")))
+					
+					;;	toggle computer trading
+					(setq ADT_softwareToggleCompTrading (lambda () (ADT_softwareToggle 'TradingComputer)))
+
+					;;	toggle computer trading menu text
+					(setq ADT_softwareToggleCompTradingMenuText (lambda () (cat "Toggle Trading Computer (Currently: " (ADT_softwareUIStatus 'TradingComputer) ")")))
+					
+					;;	toggle computer targeting
+					(setq ADT_softwareToggleCompTargeting (lambda () (ADT_softwareToggle 'TargetingComputer)))
+
+					;;	toggle computer targeting menu text
+					(setq ADT_softwareToggleCompTargetingMenuText (lambda () (cat "Toggle Targeting Computer (Currently: " (ADT_softwareUIStatus 'TargetingComputer) ")")))
+					
+					;;	toggle protect wingmates
+					(setq ADT_softwareToggleWingmateProtect (lambda () (ADT_softwareToggle 'ProtectWingmen)))
+
+					;;	toggle protect wingmates menu text
+					(setq ADT_softwareToggleWingmateProtectMenuText (lambda () (cat "Toggle Protect Wingmates (Currently: " (ADT_softwareUIStatus 'ProtectWingmen) ")")))
+
+					;;	Open Software menu
+					(setq ADT_softwareMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsSoftwareMain;)))
+
+					;;	List of all software menu options (can be extended by other mods)
+					(setq ADT_uiSoftwareMenuOptions (list
+						{
+							text: ADT_softwareToggleAutopilotMenuText
+							action: ADT_softwareToggleAutopilot
+						}
+						{
+							text: ADT_softwareToggleMapSystemMenuText
+							action: ADT_softwareToggleMapSystem
+						}
+						{
+							text: ADT_softwareToggleMapGalacticMenuText
+							action: ADT_softwareToggleMapGalactic
+						}
+						{
+							text: ADT_softwareToggleSRSMenuText
+							action: ADT_softwareToggleSRS
+						}
+						{
+							text: ADT_softwareToggleSRSEMenuText
+							action: ADT_softwareToggleSRSE
+						}
+						{
+							text: ADT_softwareToggleLRSMenuText
+							action: ADT_softwareToggleLRS
+						}
+						{
+							text: ADT_softwareToggleCompMiningMenuText
+							action: ADT_softwareToggleCompMining
+						}
+						{
+							text: ADT_softwareToggleCompTradingMenuText
+							action: ADT_softwareToggleCompTrading
+						}
+						{
+							text: ADT_softwareToggleCompTargetingMenuText
+							action: ADT_softwareToggleCompTargeting
+						}
+						{
+							text: ADT_softwareToggleFriendlyFireLockMenuText
+							action: ADT_softwareToggleFriendlyFireLock
+						}
+						{
+							text: ADT_softwareToggleWingmateProtectMenuText
+							action: ADT_softwareToggleWingmateProtect
+						}
+					))
+					
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Respawn functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Clear respawn helper
+					(setq ADT_respawnClearHelper (lambda ()
+						(block () 
+							(typSetData &ADT_vvRespawnHelper; 'RespawnMode ())
+						)
+					))
+
+					;;	Activate helper
+					(setq ADT_respawnSetHelper (lambda ()
+						(block () 
+							(typSetData &ADT_vvRespawnHelper; 'RespawnMode True)
+						)
+					))
+
+					;;	Get Respawn
+					(setq ADT_respawnGet (lambda () (typGetData &ADT_vvRespawnHelper; 'RespawnMode)))
+
+					;;	Toggle Respawn
+					(setq ADT_respawnToggle (lambda () (if (ADT_respawnGet) (ADT_respawnClearHelper) (ADT_respawnSetHelper))))
+
+					;;	Generate menu text for toggle invuln
+					(setq ADT_respawnGetMenuText (lambda () (cat "Toggle Auto-Respawn (Currently: " (if (ADT_respawnGet) "ON" "OFF") ")")))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Immunity functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Get Immunity
+					(setq ADT_immunityGet (lambda () (neq () (typGetData &ADT_ovImmunity; 'state))))
+
+					;;	Set Immunity
+					(setq ADT_immunitySet (lambda (state) (block
+						((overlayID (typGetData &ADT_ovImmunity; 'state)))
+						(typSetData &ADT_ovImmunity; 'state state)
+						(if (and state (eq () overlayID))
+							(typSetData &ADT_ovImmunity; 'state (objAddOverlay gPlayerShip &ADT_ovImmunity;))
+							(if (and (not state) (neq () overlayID))
+								(block ()
+									(objRemoveOverlay gPlayerShip overlayID)
+									(typSetData &ADT_ovImmunity; 'state ())
+								)
+							)
+						)
+					)))
+
+					;; 	Toggle Immunity
+					(setq ADT_immunityToggle (lambda () (if (ADT_immunityGet) (ADT_immunitySet ()) (ADT_immunitySet True))))
+
+					;;	Generate menu text for toggle invuln
+					(setq ADT_immunityGetMenuText (lambda () (cat "Toggle Invulnerability (Currently: " (if (ADT_immunityGet) "ON" "OFF") ")")))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Fuel options (only player has fuel systems right now)
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					(setq ADT_fuelRefill (lambda () (shpConsumeFuel gPlayerShip (- ADT_giantDouble))))
+
+					(setq ADT_fuelSustain (lambda () (block 
+						(
+							(curFuel (shpGetFuelLeft gPlayerShip))
+							(targetFuel (typGetData &ADT_ovRefuel; 'plyFuelTarget))
+							(refillAmt (- curFuel targetFuel)) ;;this is intentionally reversed to be a negative number when we refill
+						)
+						(if (not targetFuel)
+							;;	if not initialized init and try again
+							(block ()
+								(typSetData &ADT_ovRefuel; 'plyFuelTarget (shpGetFuelLeft gPlayerShip))
+								(ADT_fuelSustain)
+							)
+							;;	otherwise do fuel sustain logic
+							(if (ls refillAmt 0)
+								;;	refill as much as we need to remain at the same fuel level
+								(shpConsumeFuel gPlayerShip refillAmt)
+								;;	if we have more fuel for some reason use this as the new sustain point
+								(typSetData &ADT_ovRefuel; 'plyFuelTarget curFuel)
+							)
+						)
+					)))
+
+					;;	Get Fuel Sustain
+					(setq ADT_fuelSustainGet (lambda () (neq () (typGetData &ADT_ovRefuel; 'state))))
+
+					;;	Set Fuel Sustain
+					(setq ADT_fuelSustainSet (lambda (state) (block
+						((overlayID (typGetData &ADT_ovRefuel; 'state)))
+						(typSetData &ADT_ovRefuel; 'state state)
+						(if (and state (eq () overlayID))
+							(typSetData &ADT_ovRefuel; 'state (objAddOverlay gPlayerShip &ADT_ovRefuel;))
+							(if (and (not state) (neq () overlayID))
+								(block ()
+									(objRemoveOverlay gPlayerShip overlayID)
+									(typSetData &ADT_ovRefuel; 'state ())
+								)
+							)
+						)
+					)))
+
+					;; 	Toggle Fuel Sustain
+					(setq ADT_fuelSustainToggle (lambda () (if (ADT_fuelSustainGet) (ADT_fuelSustainSet ()) (ADT_fuelSustainSet True))))
+
+					;;	Generate menu text for toggle fuel sustain
+					(setq ADT_fuelSustainGetMenuText (lambda () (cat "Toggle Fuel Sustainment (Currently: " (if (ADT_fuelSustainGet) "ON" "OFF") ")")))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Ship services and functions --- (has to be listed later to bind all functions first)
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	ADT_openShipBroker
+					(setq ADT_openShipBroker (lambda () (scrShowScreen gScreen &ADT_dsShipBroker;)))
+
+					;;	Open Ship menu
+					(setq ADT_shipMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsShipMain;)))
+
+					;;	List of all ship menu options (can be extended by other mods)
+					(setq ADT_uiShipMenuOptions (list
+						{
+							text: "Create or Install Items"
+							action: ADT_itmMenuOpen
+							isDS: True
+						}
+						{
+							text: "Edit currencies"
+							action: ADT_econMenuOpen
+							isDS: True
+						}
+						{
+							text: ADT_immunityGetMenuText
+							action: ADT_immunityToggle
+						}
+						{
+							text: ADT_respawnGetMenuText
+							action: ADT_respawnToggle
+						}
+						{
+							text: ADT_fuelSustainGetMenuText
+							action: ADT_fuelSustainToggle
+						}
+						{
+							text: "Restore player ship"
+							action: ADT_shipRestorePlayerAll
+						}
+						{
+							text: "Restore target ship"
+							action: ADT_shipRestoreTargetAll
+							disableIf: ADT_uiDisableNoShipTarget
+						}
+						{
+							text: "Refill player ship reactor"
+							action: ADT_fuelRefill
+						}
+						{
+							text: "Add or Remove Ship Software"
+							action: ADT_softwareMenuOpen
+							isDS: True
+						}
+						{
+							text: "Change player ship"
+							action: ADT_openShipBroker
+							isDS: True
+						}
+					))
+					
+                )
+            </ADT.onLoadGlobals>
+        </Events>
+    </Type>
+
+</TranscendenceModule>

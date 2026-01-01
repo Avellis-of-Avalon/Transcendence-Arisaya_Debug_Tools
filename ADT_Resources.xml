@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- Resources -->
+
+	<Image UNID="&ADT_rsDebugStargate;"			bitmap="resources/images/ADT-Debug-Stargate.png"			/>
+	<Image UNID="&ADT_rsDebugStargateHero;"		bitmap="resources/images/ADT-Debug-Stargate_hero.png"		/>
+	<Image UNID="&ADT_rsDebugBeacon;"			bitmap="resources/images/ADT-Debug-Beacon.png"				/>
+	<Image UNID="&ADT_rsDebugBeaconHero;"		bitmap="resources/images/ADT-Debug-Beacon_hero.png"			/>
+    
+</TranscendenceModule>

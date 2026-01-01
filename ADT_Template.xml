@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- Global Loader Types -->
+
+	<Type UNID="&ADT_vvGlobalLoaderTemplate;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list
+					;	Add your UNIDs here
+				)
+			</Definition>
+		</Properties>
+
+		<Events>
+			<ADT.onLoadGlobals>
+				(block ()
+					;	Global vars
+
+					;	Global lambdas
+
+				)
+			</ADT.onLoadGlobals>
+		</Events>
+	</Type>
+
+</TranscendenceModule>

@@ -1,0 +1,402 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+<!-- Global Loader -->
+
+	<Type UNID="&ADT_vvGlobalLoader;">
+		<Events>
+			<ADT.onBind>
+				(block
+					(
+						err
+						(numLoadersRun 0)
+						(fmtUNIDFull (lambda (unid)
+							"internal lambda available before global fmtUNID"
+							(cat "" (hex unid 8) " - " (unvEntity unid))
+						))
+					)
+					(if (not ADT_globalsReset)
+						;	Then we dont need to init again
+						(block ()
+							(dbgLog "ADT Global Loader: Already initialized, skipping")
+							;	Return Nil
+							()
+						)
+						;	Otherwise we need to run again
+						(block ()
+							(setq ADT_runLoader (lambda (loader)
+								"ADT_runLoader runs an ADT_globalLoader, running any dependencies first."
+								(block
+									(
+										(dependencies (typ@ loader "adt.loader.dependencies"))
+										err
+									)
+									(typSetData loader "adt.loader.queued" True)
+									(dbgLog "ADT Global Loader: Num dependencies found in " (fmtUNIDFull loader) ": " (count dependencies))
+									(if dependencies
+										(enumWhile dependencies (not err) dependency
+											(block
+												(
+													(isQueued (typ@ dependency "adt.loader.queued"))
+													(needsLoad (not (typ@ dependency "adt.loader.loaded")))
+												)
+												(dbgLog "ADT Global Loader: Checking Dependency " (fmtUNID loader) " - " (unvEntity loader) " IsQueued: " isQueued " NeedsLoad: " needsLoad)
+												(if (and isQueued needsLoad)
+													(setq err (error (cat "Failed to load " (fmtUNID loader) " because of a circular dependency involving " (fmtUNID dependency))))
+												)
+												(if needsLoad
+													(setq err (ADT_runLoader dependency))
+												)
+											)
+										)
+									)
+									(if (not err)
+										(block ()
+											(typFireEvent loader "ADT._onLoadGlobals")
+											(dbgLog "ADT Global Loader: Loaded " (fmtUNIDFull loader))
+										)
+									)
+									;   Return any errors so they get logged
+									err
+								)
+							))
+
+							(enumWhile (typFind "* +ADT_loader") (not err) loader
+								(block
+									(
+										(isQueued (typ@ loader "adt.loader.queued"))
+										(needsLoad (not (typ@ loader "adt.loader.loaded")))
+									)
+									(if (and isQueued needsLoad)
+										(dbgLog (cat "Warning: loader was marked as queued and not loaded when invoked by root loader. Check loader flag is being set correctly. " (fmtUNID loader)))
+									)
+									(if needsLoad
+										(block ()
+											(setq err (ADT_runLoader loader))
+											(if err
+												(dbgLog err)
+												(setq numLoadersRun (+ 1 numLoadersRun))
+											)
+										)
+									)
+								)
+							)
+
+							;	Globals are nolonger reset
+							(setq ADT_globalsReset ())
+
+							(dbgLog "ADT Global Loader: Completed initialization")
+
+							;   Return any errors so they get logged
+							err
+						)
+					)
+				)
+			</ADT.onBind>
+		</Events>
+	</Type>
+
+<!-- Global Loader Types -->
+
+	<Type UNID="&ADT_baGlobalLoaderBase;"
+		virtual="true"
+		>
+		<Properties>
+			;   adt.loader.dependencies
+			;   override this with a list of global loaders that are needed
+			<Definition id="adt.loader.dependencies">
+				(list
+					;   Add your UNIDs here
+				)
+			</Definition>
+
+			;   Do not override the following
+			<Constant id="adt.loader._clear">
+				(block ()
+					;   We use typData instead of Globals because
+					;   Globals are not available during all of the
+					;   loading points that we need
+
+					(typSetData gType "adt.loader.queued" ())
+					(typSetData gType "adt.loader.loaded" ())
+				)
+			</Constant>
+
+			<!-- This is a global since it initializes after constants and definitions -->
+			<Global id="adt.loader._onBind">
+				(block
+					(
+						(adtLoaders (typFind "* +ADT_loader"))
+						(allBound True)
+					)
+					;	Debug log
+					(dbgLog "ADT Global Loader - Running _onBind on " (fmtUNID gType))
+					;	Mark ourself as bound
+					(typSetData gType "adt.loader.bound" True)
+					;	Check if all other loaders are bound
+					(enumWhile adtLoaders allBound adtLoader
+						(if (typ@ adtLoader "adt.loader.bound")
+							;	if its bound we continue
+							()
+							;	otherwise we cannot continue
+							(setq allBound ())
+						)
+					)
+					;	if all are bound then we can initialize
+					(if allBound
+						(block ()
+							(dbgLog "ADT Global Loader - All bound, firing loader")
+							(typFireEvent &ADT_vvGlobalLoader; 'ADT.onBind)
+						)
+					)
+				)
+			</Global>
+
+			<!-- internally we must set these via type data because Global properties DO NOT FUNCTION CORRECTLY during property init, but type data does -->
+			<DynamicGlobal id="adt.loader.queued">
+				(typGetData gType "adt.loader.queued")
+			</DynamicGlobal>
+			<DynamicGlobal id="adt.loader.loaded">
+				(typGetData gType "adt.loader.loaded")
+			</DynamicGlobal>
+			<DynamicGlobal id="adt.loader.bound">
+				(typGetData gType "adt.loader.bound")
+			</DynamicGlobal>
+		</Properties>
+
+		<Events>
+			<ADT.onLoadGlobals>
+				;   Add your global loading code here
+			</ADT.onLoadGlobals>
+
+			;   Do not override the following
+			<ADT._onLoadGlobals>
+				(block ()
+					(dbgLog "ADT Global Loader: " (hex gType 8) " - " (unvEntity gType) " ADT._onLoadGlobals fired")
+					(typFireEvent gType "ADT.onLoadGlobals")
+					(typSetData gType "adt.loader.loaded" True)
+				)
+			</ADT._onLoadGlobals>
+		</Events>
+	</Type>
+
+	<Type UNID="&ADT_vvGlobalLoaderCore;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list )
+			</Definition>
+		</Properties>
+		<Events>
+			<ADT.onLoadGlobals>
+				(block ()
+
+					;   Global constants
+
+					(setq ADT_giantInt 0x7FFFFFFF)
+
+					(setq ADT_giantDouble (* (double ADT_giantInt) (double ADT_giantInt)))
+
+					;;	cached str type
+					(setq ADT_typeStr (typeOf "string"))
+
+					;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Str Functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Separate out name and criteria filters
+					;;		returns struct of {name: ..., criteria: ...}
+					(setq ADT_strSplitFilter (lambda (filterStr) (block
+						(
+							(filterParts (strSplit filterStr "/"))
+							(hasCriteria (gr (count filterParts) 1))
+							(criteriaPart (if hasCriteria (slice filterParts -1 -1)))
+							(namePart (if hasCriteria (slice filterParts 0 -2)))
+						)
+						(if hasCriteria
+							{
+								name: (join namePart "/")
+								criteria: (@ criteriaPart 0)
+							}
+							{
+								name: filterStr
+							}
+						)
+					)))
+
+					;;	Filter by pattern
+					(setq ADT_strMatchesPattern (lambda (source pattern) (block
+						(
+							(patternSegments (strSplit pattern "*"))
+							(firstSegment (@ patternSegments 0))
+							(hasWildcards (!= (count patternSegments) 1))
+						)
+						(if (= (count patternSegments) 1)
+							;;	check if empty or exact match
+							(if (= (count firstSegment) 0)
+								True
+								(= firstSegment source)
+							)
+							;;	check if both start and end match or are empty
+							(block
+								(
+									(startMatches (or (= (count firstSegment) 0) (strBeginsWith source firstSegment)))
+									(lastSegment (@ (slice patternSegments -1 -1) 0))
+									(endMatches (or (= (count lastSegment) 0) (strEndsWith source lastSegment)))
+								)
+								(if (and startMatches endMatches)
+									(if (= (count patternSegments) 2)
+										;;	If we matched everything we need to already, we are good
+										True
+										;;	Otherwise we need to check inner segments
+										(block
+											(
+												(endIdx (- (count patternSegments) 2))
+												(remainingSource (slice source (count firstSegment) (- -1 (count lastSegment))))
+												(nextPos ())
+												(break ())
+											)
+											(for segmentIdx 1 endIdx
+												(block
+													(
+														(curSegment (@ patternSegments segmentIdx))
+													)
+													(if (!=== break)
+														;;	just skip to exit
+														()
+														;;	else process
+														(if (setq nextPos (strFind remainingSource curSegment))
+															;;	we found something
+															(setq remainingSource (slice remainingSource (+ nextPos (count curSegment)) -1))
+															;;	no match, need to exit
+															(setq break 1)
+														)
+													)
+												)
+											)
+											(if (=== break)
+											;;	break is still nil, we successfully matched everything
+											True
+											;;	otherwise we didnt match
+											()
+											)
+										)
+									)
+								)
+							)
+						)
+					)))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Math Functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					
+					;;	Get the value of a certain bit within an int
+					(setq ADT_bitGet (lambda (a bit)
+						(if (gr bit 31)
+							0
+							(int (mod (int (/ a (int (pow 2 bit)))) 2))
+						)
+					))
+
+					;;	If a bit in an int equals another value
+					(setq ADT_bitEq (lambda (a bit b)
+						(block
+							(_b (if (= b 0) 0 1))
+							(= (ADT_bitGet a bit) b)
+						)
+					))
+
+					;;	If a bit in an int is true
+					(setq ADT_bitTrue (lambda (a bit)
+						(ADT_bitEq a bit 1)
+					))
+
+				)
+			</ADT.onLoadGlobals>
+		</Events>
+	</Type>
+
+	<Type UNID="&ADT_vvGlobalLoaderMain;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list
+					&ADT_vvGlobalLoaderCore;
+					&ADT_vvGlobalLoaderDataInspector;
+					&ADT_vvGlobalLoaderDebugVis;
+					&ADT_vvGlobalLoaderDevRoom;
+					&ADT_vvGlobalLoaderHelp;
+					&ADT_vvGlobalLoaderObjCreate;
+					&ADT_vvGlobalLoaderPlayer;
+					&ADT_vvGlobalLoaderTravel;
+					&ADT_vvGlobalLoaderUI;
+				)
+			</Definition>
+		</Properties>
+
+		<Events>
+			<ADT.onLoadGlobals>
+				(block ()
+
+					;;	List of all menu options (can be extended by other mods)
+					(setq ADT_uiMenuOptions (list
+						{
+							text: "Map or Jump to..."
+							action: ADT_gateMenuOpen
+							isDS: True
+						}
+						{
+							text: "Ship buffs, services &amp; tools"
+							action: ADT_shipMenuOpen
+							isDS: True
+						}
+						{
+							text: "Create ships and stations"
+							action: ADT_objCreateMainMenuOpen
+							isDS: True
+						}
+						{
+							text: "Toggle Debug Visualizations"
+							action: ADT_dbgVisMenuOpen
+							isDS: True
+						}
+						{
+							text: ADT_dbgToggleDevModeMenuText
+							action: ADT_dbgToggleDevMode
+						}
+						{
+							text: "View help articles"
+							action: ADT_helpMenuOpen
+							isDS: True
+						}
+						{
+							text: "Dump Tlisp Help (built-in only)"
+							action: ADT_helpDump
+						}
+						{
+							text: "Dump Tlisp Help (including lambdas)"
+							args: (list '*)
+							action: ADT_helpDump
+						}
+					))
+				)
+			</ADT.onLoadGlobals>
+		</Events>
+	</Type>
+
+	<!-- Globals -->
+	<Globals>
+		(block ()
+			(setq ADT_globalsReset True)
+		)
+	</Globals>
+
+</TranscendenceModule>

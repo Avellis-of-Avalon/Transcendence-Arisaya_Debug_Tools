@@ -1,0 +1,417 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- Nested Screen Manager -->
+
+	<Type UNID="&ADT_vvNestedScreenManager;">
+		<Events>
+			<onGlobalPaneInit>
+				; aScreenUNID is the UNID of the screen being shown
+				; aScreen is the screen name (if this is a local screen)
+				; aPane is the pane being shown
+				(if
+					(ADT_uiIsSelfNesting aScreenUNID)
+					;;	We only bother to run this on self-nesting screens
+					(block
+						(
+							(isSelfNested (@ gData 'isSelfNested))
+							(parentID (@ gData 'parentNestedID))
+						)
+						(if
+							(!=== parentID)
+							;;	only run if parentID is nil
+							(if (ls parentID (count (- (typGetData gType 'stack) 1)))
+								;;	we are exiting out of the screen
+								(block ()
+									(ADT_uiNestPop)
+									(scrExitScreen gScreen)
+								)
+								;;	we are entering deeper into the nesting loop
+								(ADT_uiNestPush aScreenUNID)
+							)
+							;;	otherwise we dont process
+							()
+						)
+					)
+				)
+			</onGlobalPaneInit>
+		</Events>
+	</Type>
+
+	<!-- Dock Screen Hook -->
+
+	<Type UNID="&ADT_vvADTDevModeHooks;">
+		<Events>
+			<onGlobalPaneInit>
+				; aScreenUNID is the UNID of the screen being shown
+				; aScreen is the screen name (if this is a local screen)
+				; aPane is the pane being shown
+				(block ()
+					;;	We process each case in order
+					(if (and (ADT_uiCanDebugSortMode aScreenUNID) (ADT_dbgGetDevMode))
+						;;	Screen must have debuggable sort keys and we must be enabled
+						(scrAddAction
+							gScreen
+							'adtDebugSortKeys
+							0xFFFFFFFF	;;	last option
+							"DEBUG: Show Sort Keys"
+							()
+							()
+							(block
+								(
+									(isSelfNesting (ADT_uiIsSelfNesting aScreenUNID))
+									(lastFilterName (typGetData aScreenUNID 'lastFilterName))
+									(lastFilterCriteria (typGetData aScreenUNID 'lastFilterCriteria))
+									(curSortKeyDisplay (typGetData aScreenUNID 'sortKeyDisplay))
+									(lastStruct
+										{
+											criteria: lastFilterCriteria
+											name: lastFilterName
+										}
+									)
+								)
+								(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+								(typSetData aScreenUNID 'sortKeyDisplay (if curSortKeyDisplay () True))
+								(scrShowScreen gScreen aScreenUNID 'default
+									(if isSelfNesting
+										(set@
+											lastStruct
+											(ADT_uiNestData)
+										)
+										lastStruct
+									)
+								)
+								(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+							)
+						)
+					)
+				)
+			</onGlobalPaneInit>
+		</Events>
+	</Type>
+
+	<!-- Dockscreen hook -->
+
+	<Type UNID="&ADT_vvDockscreenHook;">
+		<Events>
+			<onGlobalPaneInit>
+				; aScreenUNID is the UNID of the screen being shown
+				; aScreen is the screen name (if this is a local screen)
+				; aPane is the pane being shown
+				(block ()
+					(ADT_uiInit)
+					(if 
+						(and
+							(eq aScreenUNID &dsShipInterior;)
+							(or (eq aPane "Default") (eq aPane 'default))
+							(eq gSource gPlayership)
+						)
+						(scrAddAction
+							gScreen
+							'adtDebugDS
+							0
+							"[=] Arisaya Debug Tools"
+							"="
+							()
+							(scrShowScreen gScreen &ADT_dsMain;)
+						)
+					)
+				)
+			</onGlobalPaneInit>
+		</Events>
+	</Type>
+
+	<!-- Dock Screens -->
+
+	<DockScreen UNID="&ADT_dsBase;"
+			name=				"Arisaya Debug Tools"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<!-- dockscreen inheritance is currently bugged -->
+		<List iconWidth="0">
+			(ADT_uiDisplayPickerList (list))
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Select Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_uiDelCursor)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsMain;"
+			name=				"Arisaya Debug Tools: Main Menu"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			inherit=			"&ADT_dsBase;"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(block ()
+				(ADT_uiDisplayPickerList ADT_uiMenuOptions)
+			)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+					(block ()
+						(ADT_uiClearNested)
+					)
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+    
+	<!-- HelperTypes -->
+
+	<Type UNID="&ADT_vvTempData;"/>
+
+	<!-- Global Loader Types -->
+
+    <Type UNID="&ADT_vvGlobalLoaderUI;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list )
+			</Definition>
+		</Properties>
+        <Events>
+            <ADT.onLoadGlobals>
+                (block ()
+
+                    ;   Global constants
+
+					;;	Key to use for opening the debug menu
+					(setq ADT_uiKey "=")
+
+                    ;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	UI functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Initialize key if not already initialized
+					(setq ADT_uiInit (lambda ()
+						(if (not (typGetData &ADT_vvDockscreenHook; 'key)) (typSetData &ADT_vvDockscreenHook; 'key ADT_uiKey) ())
+					))
+
+					;;	Always disable this command
+					(setq ADT_uiDisable (lambda () True))
+
+					;;	Disable targeted commands if player has no target
+					(setq ADT_uiDisableNoTarget (lambda () (eq () (objGetTarget gPlayerShip))))
+
+					;;	Disable targeted commands if player has no ship target
+					(setq ADT_uiDisableNoShipTarget (lambda () (eq () (objIsShip (objGetTarget gPlayerShip)))))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Developer Mode
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Dev Mode state
+					(setq ADT_dbgGetDevMode (lambda () (typGetData &ADT_vvADTDevModeHooks; 'enabled)))
+
+					;;	toggle Dev Mode menu text
+					(setq ADT_dbgToggleDevModeMenuText (lambda () (cat "Toggle ADT Dev Mode (Currently: " (if (ADT_dbgGetDevMode) "On" "Off") ")")))
+
+					(setq ADT_dbgToggleDevMode (lambda ()
+						(block
+							(
+								(curDevMode (ADT_dbgGetDevMode))
+							)
+							(if curDevMode
+								(typSetData &ADT_vvADTDevModeHooks; 'enabled ())
+								(typSetData &ADT_vvADTDevModeHooks; 'enabled True)
+							)
+						)
+					))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Menu and UI
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Global Temp helpers
+					(setq ADT_setTemp (lambda (key value) (typSetData &ADT_vvTempData; key value)))
+					(setq ADT_getTemp (lambda (key) (typGetData &ADT_vvTempData; key)))
+
+					;;	Cursor storage and retrieval
+					(setq ADT_uiSetCursor (lambda () (ADT_setTemp 'cursor (scrGetListCursor gScreen))))
+					(setq ADT_uiGetCursor (lambda () (ADT_getTemp 'cursor)))
+					(setq ADT_uiDelCursor (lambda () (ADT_setTemp 'cursor ())))
+					
+					;;	has DebugSortMode
+					(setq ADT_uiCanDebugSortMode (lambda (ds) (block ((dsType (or ds aScreenUNID))) (typMatches dsType "* +ADT_canDebugModeSortKeys"))))
+
+					;;	is ADT self nesting ds
+					(setq ADT_uiIsSelfNesting (lambda (ds) (block ((dsType (or ds aScreenUNID))) (typMatches dsType "* +ADT_selfNesting"))))
+					(setq ADT_uiClearNested (lambda () (typSetData &ADT_vvNestedScreenManager; 'stack (list))))
+					(setq ADT_uiNestMakeID (lambda ()
+						(block
+							(
+								(stack (typGetData &ADT_vvNestedScreenManager; 'stack))
+								(n1 (- (count stack) 1))
+							)
+							n1
+						)
+					))
+					(setq ADT_uiNestData (lambda ()
+						{
+							isSelfNested: True
+							parentID: (ADT_uiNestMakeID)
+						}
+					))
+					(setq ADT_uiNestPush (lambda () (if aScreenUNID (lnkAppend (typGetData &ADT_vvNestedScreenManager; 'stack)))))
+					(setq ADT_uiNestPeek (lambda ()
+						(block
+							(
+								(stack (typGetData &ADT_vvNestedScreenManager; 'stack))
+								(n1 (- (count stack) 1))
+								(e1 (@ stack n1))
+							)
+							e1
+						)
+					))
+					(setq ADT_uiNestPop (lambda ()
+						(block
+							(
+								(stack (typGetData &ADT_vvNestedScreenManager; 'stack))
+								(n1 (- (count stack) 1))
+								(e1 (@ stack n1))
+							)
+							(if (geq n1 0)
+								(lnkRemove stack n1)
+								e1
+							)
+						)
+					))
+
+					;;	display customPicker list
+					(setq ADT_uiDisplayPickerList (lambda (uiOptions)
+						(block
+							(
+								(pickerList (list))
+							)
+							(enum uiOptions option
+								(block
+									(
+										(text (@ option 'text))
+										(disableIf (@ option 'disableIf))
+										(disableIfArgs (@ option 'disableIfArgs))
+									)
+									(if (apply disableIf disableIfArgs) ()
+										(lnkAppend pickerList 
+											(list 
+												;;set the display name
+												(if
+													(eq (typeOf text) ADT_typeStr)
+													text
+													(apply text (list))
+												)
+												;;set the image
+												()
+												;;construct the description
+												()
+												;;additional data
+												option
+											)
+										)
+									)
+								)
+							)
+							pickerList
+						)
+					))
+
+					;;	Activate option on dockscreen
+					(setq ADT_uiActivateOption (lambda ()
+						(block
+							(
+								(optionEntry (scrGetListEntry gScreen))
+								(option (item optionEntry 3))
+								(action (@ option 'action))
+								(args (@ option 'args))
+								(isDS (@ option 'isDS))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(apply action args)
+							(if isDS
+								(ADT_setTemp 'cursor 0)
+								(block Nil
+									(scrRefreshScreen gScreen)
+									(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+								)
+							)
+						)
+					))
+
+					;;	make customPicker list
+					(setq ADT_uiPickerList (lambda (menuOptions) (block
+						(
+							(pickerList (list))
+						)
+						(enum menuOptions option
+							(block
+								(
+									(text (@ option 'text))
+									(disableIf (@ option 'disableIf))
+									(disableIfArgs (@ option 'disableIfArgs))
+								)
+								(if (apply disableIf disableIfArgs) ()
+									(lnkAppend pickerList 
+										(list 
+											;;set the display name
+											(if
+												(eq (typeOf text) ADT_typeStr)
+												text
+												(apply text (list))
+											)
+											;;set the image
+											()
+											;;construct the description
+											()
+											;;additional data
+											option
+										)
+									)
+								)
+							)
+						)
+						pickerList
+					)))
+
+                )
+            </ADT.onLoadGlobals>
+        </Events>
+    </Type>
+    
+</TranscendenceModule>

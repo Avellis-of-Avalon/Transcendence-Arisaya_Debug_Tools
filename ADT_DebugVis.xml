@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- Dock Screen for toggling debug visualizations -->
+	
+	<DockScreen UNID="&ADT_dsDbgVisMain;"
+			name=				"Arisaya Debug Tools: Debug Visualizations"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayPickerList ADT_uiDbgVisMenuOptions)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	<!-- Visualization Overlays -->
+	
+	<OverlayType UNID="&ADT_ovMiningOreCount;"
+			attributes=		"effect, ADT_oreCount"
+			>
+		<Counter style=		"textFlag"
+				color=		"#5ff12a"
+				showOnMap=	"true"
+				/>
+	
+		<Events>
+			<OnCreate>
+				(block (
+					(asteroidType (objGetProperty gSource 'asteroidType))
+					)
+					(objSetOverlayProperty gSource aOverlayID 'counter 0)
+					(objSetOverlayProperty gSource aOverlayID 'counterLabel 
+						(typTranslate gType 'msgScanning {
+							asteroidType: (typTranslate &unidEngineText; (cat 'asteroidType. asteroidType))
+							})
+						)
+					)
+			</OnCreate>
+
+			<OnUpdate>
+				(block
+					(
+						(oreFound (objGetItems gSource "* +ore; | * +minable; | * +SND_oreChunks"))
+					)
+					
+					(if (not oreFound)
+						(objRemoveOverlay gSource aOverlayID)
+						(block
+							(
+								(bestItem 
+									(map oreFound '(reduceMax original) theItem 
+										(itmGetLevel theItem)
+									)
+								)
+								(bestLevel (itmGetLevel bestItem))
+								(resType
+									(if (itmHasAttribute bestItem 'ore)
+										'ore
+										'res
+									)
+								)
+								(asteroidType (objGetProperty gSource 'asteroidType))
+							)
+							(objSetOverlayProperty gSource aOverlayID 'counter bestLevel)
+							(objSetOverlayProperty gSource aOverlayID 'counterLabel
+								(typTranslate gType (cat 'msgLabel. resType) {
+									asteroidType: (typTranslate &unidEngineText; (cat 'asteroidType. asteroidType))
+									level: bestLevel
+								})
+							)
+						)
+					)
+				)
+			</OnUpdate>
+		</Events>
+	
+		<Language>
+			<Text id="msgNoResourcesFound">No resources found</Text>
+
+			<Text id="msgNoOreFound">No asteroid resources found</Text>
+			<Text id="msgOreFound1">Found an asteroid with resources</Text>
+			<Text id="msgOreFoundN">Found %count% asteroids with resources</Text>
+
+			<Text id="msgScanning">%AsteroidType%\nScanning...</Text>
+			<Text id="msgLabel.ore">%AsteroidType%\nLevel %level% Ore</Text>
+			<Text id="msgLabel.res">%AsteroidType%\nLevel %level% Resource</Text>
+		</Language>
+	</OverlayType>
+
+<!-- Helper Types -->
+	
+	<Type UNID="&ADT_vvDebugVisData;"/>
+	
+	<Type UNID="&ADT_vvCustomDebugVisData;"/>
+	
+	<Type UNID="&ADT_vvMiningVisDataHelper;">
+		<Events>
+			<AddOverlaysToSystem>
+				(block 
+					(
+						(curSystem (sysGetNode))
+						(curSystemKey (cat 'ADT_miningOverlays_ curSystem))
+						(systemOreOverlaysRaw (typGetData &ADT_vvMiningVisDataHelper; (cat 'miningOreOverlays (sysGetNode))))
+						(systemOreOverlays (if systemOreOverlaysRaw systemOreOverlaysRaw (list)))
+					)
+					(if systemOreOverlays
+						;;	we are already done skip this system
+						()
+						;;	otherwise we need to add the overlays
+						(block ()
+							(enum (sysFindObject () "t +asteroid") theObj (if (objGetItems theObj "* +ore; | * +minable;")
+								(block
+									(
+										(theOverlay (objAddOverlay theObj &ADT_ovMiningOreCount;))
+										(theObjId (objGetId theObj))
+									)
+									(lnkAppend systemOreOverlays (list theObjId theOverlay))
+								)
+								;;	otherwise we skip	
+							))
+							(typSetData &ADT_vvMiningVisDataHelper; curSystemKey systemOreOverlays)
+							(plyMessage gPlayer "Added mining info overlays")
+						)
+					)
+				)
+			</AddOverlaysToSystem>
+			<RemOverlaysFromSystem>
+				(block
+					(
+						(curSystem (sysGetNode))
+						(curSystemKey (cat 'ADT_miningOverlays_ curSystem))
+						(systemOreOverlays (typGetData &ADT_vvMiningVisDataHelper; curSystemKey))
+					)
+					(enum systemOreOverlays theOverlayList
+						(block
+							(
+								(theObjId (@ theOverlayList 0))
+								(theObj (objGetObjByID theObjId))
+								(theOverlay (@ theOverlayList 1))
+							)
+							(objRemoveOverlay theObj theOverlay)
+						)
+					)
+					(typSetData &ADT_vvMiningVisDataHelper; curSystemKey systemOreOverlays)
+					(plyMessage gPlayer "Removed mining info overlays")
+				)
+			</RemOverlaysFromSystem>
+			<OnGlobalPlayerEnteredSystem>
+				(block
+					(
+						(dbgVis 'showMiningInfo)
+						(curStatus (typGetData &ADT_vvCustomDebugVisData; dbgVis))
+						(curSystem (sysGetNode))
+						(curSystemKey (cat 'ADT_miningOverlays_ curSystem))
+						(curSystemState (typGetData gType curSystemKey))
+					)
+					(if curStatus
+						;;	If we are enabled...
+						(if curSystemState
+							;;	and we are enabled already
+							()	;;	do nothing
+							;;	but we are not enabled yet
+							(typAddTimerEvent &ADT_vvMiningVisDataHelper; 1 'AddOverlaysToSystem)
+						)
+						;;	If we are disabled...
+						(if curSystemState
+							;;	but we are enabled still
+							(typAddTimerEvent &ADT_vvMiningVisDataHelper; 1 'RemOverlaysFromSystem)
+							;;	and we are disabled already
+							()	;;	do nothing
+						)
+					)
+				)
+			</OnGlobalPlayerEnteredSystem>
+		</Events>
+	</Type>
+
+	<!-- Global Loader Types -->
+
+    <Type UNID="&ADT_vvGlobalLoaderDebugVis;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list )
+			</Definition>
+		</Properties>
+        <Events>
+            <ADT.onLoadGlobals>
+                (block ()
+
+                    ;   Global constants
+
+                    ;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Debug Visualization functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	toggle engine visualizations
+					(setq ADT_dbgVisToggle (lambda (dbgVis) (block
+						(
+							(curStatus (typGetData &ADT_vvDebugVisData; dbgVis))
+						)
+						(if curStatus
+							(block ()
+								(dbgSet dbgVis ())
+								(typSetData &ADT_vvDebugVisData; dbgVis ())
+							)
+							(block ()
+								(dbgSet dbgVis True)
+								(typSetData &ADT_vvDebugVisData; dbgVis True)
+							)
+						)
+					)))
+
+					;;	toggle mining visualization
+					(setq ADT_dgbMiningVisToggle (lambda () (block
+						(
+							(dbgVis 'showMiningInfo)
+							(curStatus (typGetData &ADT_vvCustomDebugVisData; dbgVis))
+						)
+						(if curStatus
+							;;	turn off if already on
+							(block ()
+								(typAddTimerEvent &ADT_vvMiningVisDataHelper; 1 'RemOverlaysFromSystem)
+								(typSetData &ADT_vvCustomDebugVisData; dbgVis ())
+							)
+							;;	turn on if already off
+							(block ()
+								(typAddTimerEvent &ADT_vvMiningVisDataHelper; 1 'AddOverlaysToSystem)
+								(typSetData &ADT_vvCustomDebugVisData; dbgVis True)
+							)
+						)
+					)))
+
+					;;	get ui name for status
+					(setq ADT_dbgVisUIStatus (lambda (dbgVis) (block
+						(
+							(curStatus (typGetData &ADT_vvDebugVisData; dbgVis))
+						)
+						(switch
+							(!=== curStatus)
+								"On"
+							"Off"
+						)
+					)))
+
+					;;	get ui name for status on custom visuals
+					(setq ADT_dbgCustomVisUIStatus (lambda (dbgVis) (block
+						(
+							(curStatus (typGetData &ADT_vvCustomDebugVisData; dbgVis))
+						)
+						(switch
+							(!=== curStatus)
+								"On"
+							"Off"
+						)
+					)))
+
+					;;	toggle AI Debug
+					(setq ADT_dbgVisToggleAIDebug (lambda () (ADT_dbgVisToggle 'showAIDebug)))
+
+					;;	toggle AI Debug menu text
+					(setq ADT_dbgVisToggleAIDebugMenuText (lambda () (cat "Toggle AI Debug (Currently: " (ADT_dbgVisUIStatus 'showAIDebug) ")")))
+
+					;;	toggle Bounds
+					(setq ADT_dbgVisToggleBounds (lambda () (ADT_dbgVisToggle 'showBounds)))
+
+					;;	toggle Bounds menu text
+					(setq ADT_dbgVisToggleBoundsMenuText (lambda () (cat "Toggle Bounds (Currently: " (ADT_dbgVisUIStatus 'showBounds) ")")))
+
+					;;	toggle Damage Done
+					(setq ADT_dbgVisToggleDamage (lambda () (ADT_dbgVisToggle 'showDamageDone)))
+
+					;;	toggle Damage Done menu text
+					(setq ADT_dbgVisToggleDamageMenuText (lambda () (cat "Toggle Damage Done (Currently: " (ADT_dbgVisUIStatus 'showDamageDone) ")")))
+
+					;;	toggle Facings Angle
+					(setq ADT_dbgVisToggleAngle (lambda () (ADT_dbgVisToggle 'showFacingsAngle)))
+
+					;;	toggle Facings Angle menu text
+					(setq ADT_dbgVisToggleAngleMenuText (lambda () (cat "Toggle Facings Angle (Currently: " (ADT_dbgVisUIStatus 'showFacingsAngle) ")")))
+
+					;;	toggle Line Of Fire
+					(setq ADT_dbgVisToggleLOF (lambda () (ADT_dbgVisToggle 'showLineOfFire)))
+
+					;;	toggle Line of Fire menu text
+					(setq ADT_dbgVisToggleLOFMenuText (lambda () (cat "Toggle Line Of Fire (Currently: " (ADT_dbgVisUIStatus 'showLineOfFire) ")")))
+
+					;;	toggle Nav Paths
+					(setq ADT_dbgVisToggleNavPaths (lambda () (ADT_dbgVisToggle 'showNavPaths)))
+
+					;;	toggle Nav Paths menu text
+					(setq ADT_dbgVisToggleNavPathsMenuText (lambda () (cat "Toggle Nav Paths (Currently: " (ADT_dbgVisUIStatus 'showNavPaths) ")")))
+
+					;;	toggle Node Info
+					(setq ADT_dbgVisToggleNodeInfo (lambda () (ADT_dbgVisToggle 'showNodeInfo)))
+
+					;;	toggle Node Info menu text
+					(setq ADT_dbgVisToggleNodeInfoMenuText (lambda () (cat "Toggle Node Info (Currently: " (ADT_dbgVisUIStatus 'showNodeInfo) ")")))
+
+					;;	toggle AI Debug
+					(setq ADT_dbgVisToggleOrderInfo (lambda () (ADT_dbgVisToggle 'showOrderInfo)))
+
+					;;	toggle AI Debug menu text
+					(setq ADT_dbgVisToggleOrderInfoMenuText (lambda () (cat "Toggle Order Info (Currently: " (ADT_dbgVisUIStatus 'showOrderInfo) ")")))
+
+					;;	toggle worker paint locations
+					(setq ADT_dbgVisPaintLocation (lambda () (ADT_dbgVisToggle 'showPaintLocation)))
+
+					;;	toggle worker paint locations menu text
+					(setq ADT_dbgVisPaintLocationMenuText (lambda () (cat "Toggle Paint Location Info (Currently: " (ADT_dbgVisUIStatus 'showPaintLocation) ")")))
+
+					;;	toggle worker paint time
+					(setq ADT_dbgVisPaintTime (lambda () (ADT_dbgVisToggle 'showPaintTime)))
+
+					;;	toggle worker paint time menu text
+					(setq ADT_dbgVisPaintTimeMenuText (lambda () (cat "Toggle Paint Time Info (Currently: " (ADT_dbgVisUIStatus 'showPaintTime) ")")))
+
+					;;	toggle force ST paint
+					(setq ADT_dbgForceSTPaint (lambda () (ADT_dbgVisToggle 'forceSTPaint)))
+
+					;;	toggle force ST paint menu text
+					(setq ADT_dbgForceSTPaintMenuText (lambda () (cat "Toggle Single-Thread Paint (Currently: " (ADT_dbgVisUIStatus 'forceSTPaint) ")")))
+
+					;;	toggle Mining Debug
+					(setq ADT_dbgVisToggleMiningInfo (lambda () (ADT_dgbMiningVisToggle)))
+
+					;;	toggle Mining Debug menu text
+					(setq ADT_dbgVisToggleMiningInfoMenuText (lambda () (cat "Toggle Mining Info (Currently: " (ADT_dbgCustomVisUIStatus 'showMiningInfo) ")")))
+
+					;;	Open Dbg Vis menu
+					(setq ADT_dbgVisMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsDbgVisMain;)))
+
+					;;	List of all dbg vis menu options (can be extended by other mods)
+					(setq ADT_uiDbgVisMenuOptions (list
+						{
+							text:		ADT_dbgVisToggleAIDebugMenuText
+							action:		ADT_dbgVisToggleAIDebug
+						}
+						{
+							text:		ADT_dbgVisToggleBoundsMenuText
+							action:		ADT_dbgVisToggleBounds
+						}
+						{
+							text:		ADT_dbgVisToggleDamageMenuText
+							action:		ADT_dbgVisToggleDamage
+						}
+						{
+							text:		ADT_dbgVisToggleAngleMenuText
+							action:		ADT_dbgVisToggleAngle
+						}
+						{
+							text:		ADT_dbgVisToggleLOFMenuText
+							action:		ADT_dbgVisToggleLOF
+						}
+						{
+							text:		ADT_dbgVisToggleNavPathsMenuText
+							action:		ADT_dbgVisToggleNavPaths
+						}
+						{
+							text:		ADT_dbgVisToggleNodeInfoMenuText
+							action:		ADT_dbgVisToggleNodeInfo
+						}
+						{
+							text:		ADT_dbgVisToggleOrderInfoMenuText
+							action:		ADT_dbgVisToggleOrderInfo
+						}
+						{
+							text:		ADT_dbgVisPaintLocationMenuText
+							action:		ADT_dbgVisPaintLocation
+						}
+						{
+							text:		ADT_dbgVisPaintTimeMenuText
+							action:		ADT_dbgVisPaintTime
+						}
+						{
+							text:		ADT_dbgForceSTPaintMenuText
+							action:		ADT_dbgForceSTPaint
+						}
+						{
+							text:		ADT_dbgVisToggleMiningInfoMenuText
+							action:		ADT_dbgVisToggleMiningInfo
+						}
+					))
+
+                )
+            </ADT.onLoadGlobals>
+        </Events>
+    </Type>
+
+</TranscendenceModule>

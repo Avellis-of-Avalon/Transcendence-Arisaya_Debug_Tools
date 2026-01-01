@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- help dockscreen -->
+	
+	<DockScreen UNID="&ADT_dsHelpTopics;"
+			name=				"Arisaya Debug Tools: Help Articles"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			inherit=			"&ADT_dsBase;"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(block ()
+				(ADT_uiDisplayPickerList ADT_uiHelpOptions)
+			)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+					(block ()
+						(ADT_uiClearNested)
+					)
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+    
+	<DockScreen UNID="&ADT_dsHelp;"
+			name=				"ADT Help Information"
+			backgroundID=		"none"
+			nestedScreen=		"true"
+			>
+		<Display>
+			<Text id="text" left="12" right="-12" top="16" bottom="-16">
+			</Text>
+		</Display>
+
+		<Panes>
+			<Default>
+				<OnPaneInit>
+					(block (
+							(theText (@ gData "Text"))
+							(theTitle (@ gData "Title"))
+						)
+
+						;	Display the text
+						(if theText
+                            (if theTitle
+                                (block Nil
+                                    (scrSetDisplayText gScreen "text" theText)
+                                    (scrSetDesc gScreen theTitle)
+									(DDR_addScroll)
+                                    )
+                                (block Nil
+                                    (scrSetDisplayText gScreen "text" theText)
+                                    (scrSetDesc gScreen "The ROM contains a document.")
+									(DDR_addScroll)
+                                    )
+                                )
+							(block Nil
+								(scrSetDisplayText gScreen "text" "")
+								(scrSetDesc gScreen "The ROM is blank.")
+								(DDR_addScroll)
+								(DDR_disableScrollDown)
+								)
+							)
+						
+						;	Set the scroll position
+						(DDR_setTemp DDR_tmpScrollCount 0)
+						(DDR_setTemp 'DDR_sourceText (if theText theText ""))
+						(if (DDR_canScroll theText) (DDR_disableScrollDown))
+						)
+				</OnPaneInit>
+
+				<Actions>
+					<Action name="Done" key="D" default="1" cancel="1">
+						<Exit/>
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+	<!-- Global Loader Types -->
+
+    <Type UNID="&ADT_vvGlobalLoaderHelp;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list )
+			</Definition>
+		</Properties>
+        <Events>
+            <ADT.onLoadGlobals>
+                (block ()
+
+                    ;   Global constants
+
+                    (setq ADT_criteriaObjects (help 'sysFindObject))
+
+                    (setq ADT_criteriaItems (help 'itmGetTypes))
+
+                    (setq ADT_criteriaTypes (help 'typFind))
+
+                    (setq ADT_criteriaMissions (help 'msnFind))
+
+                    ;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Help Functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					
+					;;	show help for criteria: space objects
+					(setq ADT_helpOpenCriteriaObjects (lambda () (scrShowScreen gScreen &ADT_dsHelp;
+						{
+							Text: ADT_criteriaObjects
+							Title: "Criteria for Space Objects"
+						}
+					)))
+
+					;;	show help for criteria: item types
+					(setq ADT_helpOpenCriteriaItems (lambda () (scrShowScreen gScreen &ADT_dsHelp;
+						{
+							Text: ADT_criteriaItems
+							Title: "Criteria for Items"
+						}
+					)))
+
+					;;	show help for criteria: types
+					(setq ADT_helpOpenCriteriaTypes (lambda () (scrShowScreen gScreen &ADT_dsHelp;
+						{
+							Text: ADT_criteriaTypes
+							Title: "Criteria for Types"
+						}
+					)))
+
+					;;	show help for criteria: missions
+					(setq ADT_helpOpenCriteriaMissions (lambda () (scrShowScreen gScreen &ADT_dsHelp;
+						{
+							Text: ADT_criteriaMissions
+							Title: "Criteria for Missions"
+						}
+					)))
+
+					;;	Open Help Topics Menu
+					(setq ADT_helpMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsHelpTopics;)))
+
+					;;	Help topics options
+					(setq ADT_uiHelpOptions (list
+						{
+							text: "Criteria for Space Objects"
+							action: ADT_helpOpenCriteriaObjects
+							isDS: True
+						}
+						{
+							text: "Criteria for Items"
+							action: ADT_helpOpenCriteriaItems
+							isDS: True
+						}
+						{
+							text: "Criteria for Types"
+							action: ADT_helpOpenCriteriaTypes
+							isDS: True
+						}
+						{
+							text: "Criteria for Missions"
+							action: ADT_helpOpenCriteriaMissions
+							isDS: True
+						}
+					))
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Tlisp Help
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					(setq ADT_helpDump (lambda (fnType)
+						(block
+							(
+								;;	we default to primitives
+								(fnTypeFinal (or fnType 'p))
+								(rawHelp (help '* fnTypeFinal))
+								(allFnNames
+									(map (strSplit rawHelp "\n") 'excludeNil line
+										(if
+											(strBeginsWith line "("  ;; ) this is just to fix vscode
+											)
+											(strReplace (@ (strSplit line " ") 0) "(" "" ;; ) this is just to fix vscode
+											)
+										)
+									)
+								)
+								(setAllFnNames (list))
+								(_ (enum allFnNames fnName (if (find setAllFnNames fnName) () (lnkAppend setAllFnNames fnName))))
+								(numFns (count setAllFnNames))
+								(allFnHelps
+									(append (list ())	;;	this is so the timestamp doesnt show up on the first line with actual text
+										(map setAllFnNames fnName (help fnName))
+									)
+								)
+								(allHelp (join allFnHelps "\n"))
+							)
+							(dbgLog allHelp)
+							(plyMessage gPlayer "All function help text written to debug.log!")
+						)
+					))
+
+                )
+            </ADT.onLoadGlobals>
+        </Events>
+    </Type>
+
+</TranscendenceModule>

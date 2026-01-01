@@ -1,0 +1,941 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<TranscendenceModule>
+
+	<!-- Dockscreens for travel -->
+	
+	<DockScreen UNID="&ADT_dsTravelMain;"
+			name=				"Arisaya Debug Tools: Travel"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayPickerList ADT_uiGateMenuOptions)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+			
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Activate Option" default="1" key="A">
+						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsTravelSystem;"
+			name=				"Arisaya Debug Tools: Travel To System"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			attributes=			"ADT_selfNesting, ADT_canDebugModeSortKeys"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			 (block
+			 	(
+					(pickerList (list))
+					(idx (ADT_getTemp 'cursor))
+					(filterCriteriaDefault "")
+					(filterCriteria (or (@ gData 'criteria) filterCriteriaDefault))
+					(filterNameDefault "")
+					(filterName (or (@ gData 'name) filterNameDefault))
+					(curAttributeDisplay (typGetData &ADT_dsTravelSystem; 'attributeDisplay))
+				)
+			 	(enum (sysGetNodes filterCriteria) node
+					(block
+						(
+							(nodeName (sysGetName node))
+						)
+						(typSetData &ADT_dsTravelSystem; 'lastFilterCriteria filterCriteria)
+						(typSetData &ADT_dsTravelSystem; 'lastFilterName filterName)
+						(if (or (ADT_strMatchesPattern nodeName filterName) (ADT_strMatchesPattern node filterName))
+							;;	add this if we matched
+							(lnkAppend pickerList
+								(list 
+									;;set the display name
+									nodeName
+									;;set the image
+									()
+									;;construct the description
+									(cat
+										"Level: " (sysGetLevel node)
+										" | "
+										"Node: " node
+										" | "
+										"Type UNID: " (hex (sysGetSystemType node) 8)
+										(if curAttributeDisplay (cat "\nAttributes: " (sys@ node 'attributes)))
+										(if (typGetData &ADT_dsTravelSystem; 'sortKeyDisplay)
+											(cat
+												"\nSort Key:\n"
+												(ADT_sortKeySysNodes node)
+											)
+											""
+										)
+									)
+									;;additional data
+									{
+										node: node
+									}
+									;;sort key
+									(ADT_sortKeySysNodes node)
+								)
+							)
+							;; otherwise we skip it
+						)
+					)
+			 	)
+				(scrSetListCursor gScreen idx)
+			 	(sort pickerList 'ascending 4)
+			 )
+		</List>
+		<Panes>
+			<Default
+				showTextInput="true"
+				desc="Pick a destination. You can filter by both name and criteria. For example, 'St*/+commonwealthSpace' will search all systems and nodes that start with 'St' and match criteria '+commonwealthSpace'. If searching only by criteria, start your query with '/'. If searching for a system with '/' in the system name or node name, put an extra '/' at the end to filter with default criteria">
+			
+				<onPaneInit>
+					(block ()
+					)
+				</onPaneInit>
+				<Actions>
+					<Action name="Refresh (if filter) / Gate (if empty)" default="1">
+						(block
+							(
+								(rawFilter (scrGetInputText gScreen))
+								(optionEntry (scrGetListEntry gScreen))
+							)
+							(if (and (=== rawFilter "") optionEntry)
+								;;	travel if nothing was added to the text input
+								(block
+									(
+										(option (item optionEntry 3))
+										(node (@ option 'node))
+									)
+									(ADT_gateToNode node)
+								)
+								;;	otherwise we refresh to whatever was entered
+								(scrShowScreen gScreen &ADT_dsTravelSystem; 'default (set@ (ADT_strSplitFilter rawFilter) (ADT_uiNestData)))
+							)
+						)
+					</Action>
+					<Action name="Toggle display of Attributes">
+						(block
+							(
+								(lastFilterName (typGetData &ADT_dsTravelSystem; 'lastFilterName))
+								(lastFilterCriteria (typGetData &ADT_dsTravelSystem; 'lastFilterCriteria))
+								(curAttributeDisplay (typGetData &ADT_dsTravelSystem; 'attributeDisplay))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(typSetData &ADT_dsTravelSystem; 'attributeDisplay (if curAttributeDisplay () True))
+							(scrShowScreen gScreen &ADT_dsTravelSystem; 'default
+								(set@
+									{
+										criteria: lastFilterCriteria
+										name: lastFilterName
+									}
+									(ADT_uiNestData)
+								)
+							)
+							(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+						)
+					</Action>
+					<Action name="Exit" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsTravelObject;"
+			name=				"Arisaya Debug Tools: Travel To Object"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			attributes=			"ADT_selfNesting, ADT_canDebugModeSortKeys"
+			>
+		<!-- Define the list we need -->
+		<List
+			iconWidth="64"
+			iconHeight="64">
+			 (block
+			 	(
+					(pickerList (list))
+					(idx (ADT_getTemp 'cursor))
+					(filterCriteriaDefault "TM")
+					(filterCriteria (or (@ gData 'criteria) filterCriteriaDefault))
+					(filterNameDefault "")
+					(filterName (or (@ gData 'name) filterNameDefault))
+				)
+			 	(enum (sysFindObject gSource filterCriteria) object
+					(block
+						(
+							(typeName (typGetDataField (objGetType object) 'name))
+							(objName (objGetName object))
+							(img (typGetImageDesc (objGetType object)))
+						)
+						(if (or (ADT_strMatchesPattern typeName filterName) (ADT_strMatchesPattern objName filterName))
+							;;	add this if we matched
+							(lnkAppend pickerList 
+								(list 
+									;;set the display name
+									(cat typeName (if (!= typeName objName) (cat " - " objName)))
+									;;set the image
+									img
+									;;construct the description
+									(cat
+										"Type UNID: " (hex (objGetType object) 8)
+										" | "
+										"Disposition: " (objGetDisposition object gPlayerShip)
+										" | "
+										"Distance: " (objGetDistance object gPlayerShip)
+										(if (typGetData &ADT_dsTravelObject; 'sortKeyDisplay)
+											(cat
+												"\nSort Key:\n"
+												(ADT_sortKeySysObjects object)
+											)
+											""
+										)
+									)
+									;;additional data
+									{
+										object: object
+									}
+									;;sort key
+									(ADT_sortKeySysObjects object)
+								)
+							)
+							;; otherwise we skip it
+						)
+					)
+			 	)
+				(scrSetListCursor gScreen idx)
+			 	(sort pickerList 'ascending 4)
+			 )
+		</List>
+		<Panes>
+			<Default
+				showTextInput="true"
+				desc="Pick a destination. You can filter by both name and criteria. For example, 'Commonwealth */TF' will search all stations that start with 'Commonwealth ' and match criteria 'TF'. If searching only by criteria, start your query with '/'. If searching for an object with '/' in the name, put an extra '/' at the end to filter with default criteria">
+			
+				<onPaneInit>
+					(block ()
+					)
+				</onPaneInit>
+				<Actions>
+					<Action name="Refresh (if filter) / Teleport (if empty)" default="1">
+						(block
+							(
+								(rawFilter (scrGetInputText gScreen))
+								(optionEntry (scrGetListEntry gScreen))
+							)
+							(if (and (=== rawFilter "") optionEntry)
+								;;	travel if nothing was added to the text input
+								(block
+									(
+										(option (item optionEntry 3))
+										(object (@ option 'object))
+									)
+									(objSetPos gPlayerShip (objGetPos object))
+									(ADT_setTemp 'cursor 0)
+									(scrExitScreen gScreen 'forceUndock)
+								)
+								;;	otherwise we refresh to whatever was entered
+								(scrShowScreen gScreen &ADT_dsTravelObject; 'default (set@ (ADT_strSplitFilter rawFilter) (ADT_uiNestData)))
+							)
+						)
+					</Action>
+					<Action name="Mark Destination">
+						(block
+							(
+								(optionEntry (scrGetListEntry gScreen))
+								(option (item optionEntry 3))
+								(object (@ option 'object))
+							)
+							(shpOrderImmediate gPlayerShip 'approach object 60)
+						)
+					</Action>
+					<Action name="Exit" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsLinkSystem;"
+			name=				"Arisaya Debug Tools: Create Stargate To System"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			attributes=			"ADT_selfNesting, ADT_canDebugModeSortKeys"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			 (block
+			 	(
+					(pickerList (list))
+					(idx (ADT_getTemp 'cursor))
+					(filterCriteriaDefault "")
+					(filterCriteria (or (@ gData 'criteria) filterCriteriaDefault))
+					(filterNameDefault "")
+					(filterName (or (@ gData 'name) filterNameDefault))
+					(curAttributeDisplay (typGetData &ADT_dsTravelSystem; 'attributeDisplay))
+				)
+			 	(enum (sysGetNodes filterCriteria) node
+					(block
+						(
+							(nodeName (sysGetName node))
+						)
+						(typSetData &ADT_dsTravelSystem; 'lastFilterCriteria filterCriteria)
+						(typSetData &ADT_dsTravelSystem; 'lastFilterName filterName)
+						(if (or (ADT_strMatchesPattern nodeName filterName) (ADT_strMatchesPattern node filterName))
+							;;	add this if we matched
+							(lnkAppend pickerList
+								(list 
+									;;set the display name
+									nodeName
+									;;set the image
+									()
+									;;construct the description
+									(cat
+										"Level: " (sysGetLevel node)
+										" | "
+										"Node: " node
+										" | "
+										"Type UNID: " (hex (sysGetSystemType node) 8)
+										(if curAttributeDisplay (cat "\nAttributes: " (sys@ node 'attributes)))
+										(if (typGetData &ADT_dsTravelSystem; 'sortKeyDisplay)
+											(cat
+												"\nSort Key:\n"
+												(ADT_sortKeySysNodes node)
+											)
+											""
+										)
+									)
+									;;additional data
+									{
+										node: node
+									}
+									;;sort key
+									(ADT_sortKeySysNodes node)
+								)
+							)
+							;; otherwise we skip it
+						)
+					)
+			 	)
+				(scrSetListCursor gScreen idx)
+			 	(sort pickerList 'ascending 4)
+			 )
+		</List>
+		<Panes>
+			<Default
+				showTextInput="true"
+				desc="Pick a destination. You can filter by both name and criteria. For example, 'St*/+commonwealthSpace' will search all systems and nodes that start with 'St' and match criteria '+commonwealthSpace'. If searching only by criteria, start your query with '/'. If searching for a system with '/' in the system name or node name, put an extra '/' at the end to filter with default criteria">
+			
+				<onPaneInit>
+					(block ()
+					)
+				</onPaneInit>
+				<Actions>
+					<Action name="Refresh (if filter) / Create Gate (if empty)" default="1">
+						(block
+							(
+								(rawFilter (scrGetInputText gScreen))
+								(optionEntry (scrGetListEntry gScreen))
+							)
+							(if (and (=== rawFilter "") optionEntry)
+								;;	travel if nothing was added to the text input
+								(block
+									(
+										(option (item optionEntry 3))
+										(node (@ option 'node))
+									)
+									(ADT_gateCreateLink node)
+								)
+								;;	otherwise we refresh to whatever was entered
+								(scrShowScreen gScreen &ADT_dsTravelSystem; 'default (set@ (ADT_strSplitFilter rawFilter) (ADT_uiNestData)))
+							)
+						)
+					</Action>
+					<Action name="Toggle display of Attributes">
+						(block
+							(
+								(lastFilterName (typGetData &ADT_dsTravelSystem; 'lastFilterName))
+								(lastFilterCriteria (typGetData &ADT_dsTravelSystem; 'lastFilterCriteria))
+								(curAttributeDisplay (typGetData &ADT_dsTravelSystem; 'attributeDisplay))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(typSetData &ADT_dsTravelSystem; 'attributeDisplay (if curAttributeDisplay () True))
+							(scrShowScreen gScreen &ADT_dsTravelSystem; 'default
+								(set@
+									{
+										criteria: lastFilterCriteria
+										name: lastFilterName
+									}
+									(ADT_uiNestData)
+								)
+							)
+							(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+						)
+					</Action>
+					<Action name="Exit" cancel="1">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+
+	<!-- Stargates -->
+
+	<!-- Stargate -->
+
+	<StationType UNID="&ADT_stDebugStargate;"
+			name=				"(stargate)"
+			sovereign=			"&svNeutral;"
+			dockScreen=			"Main"
+
+			immutable=			"true"
+
+			attributes=			"generic, stargate"
+			
+			gateEffect=			"&efStargateOut;"
+			definiteArticle=	"true"
+			>
+		<Encounter
+				exclusionRadius="50"
+				/>
+
+		<Image imageID="&ADT_rsDebugStargate;" imageWidth="412" imageHeight="412" imageFrameCount="40" imageTicksPerFrame="1" animationColumns="40"/>
+		<Image imageID="&ADT_rsDebugStargateHero;" imageWidth="320" imageHeight="320" loadOnUse="true"/>
+
+		<DockingPorts
+				portCount=		"4"
+				portRadius=		"190"
+				>
+		</DockingPorts>
+		
+		<DockScreens>
+			<Main>
+				<Panes>
+					<Default descID="descWelcome">
+						<Actions>
+							<Action name="Undock" cancel="1" key="U">
+								<Exit/>
+							</Action>
+						</Actions>
+					</Default>
+				</Panes>
+			</Main>
+		</DockScreens>
+
+		<Language>
+			<Text id="descWelcome">
+
+				You are docked at a debug stargate. This giant structure was 
+				summoned into existence by you, who as a debug user has the power
+				to trivially reshape the very stargate network. Well, at least
+				as of Transcendence 2.0 Alpha 6 you can CREATE new gates and
+				stargate linkages, but the ability to delete linkages off of
+				the starmap evades you due to engine limitations.
+
+				You do have the option to just delete the gate itself, though
+				the topology data will still exist.
+				
+				The galaxy thinks that stargates are the best mode of faster-than-light
+				travel and they are the only method known to humans, however,
+				as a debug user you are above petty limitations like that and can
+				just travel anywhere you need to with ADT's system travel feature.
+
+			</Text>
+		</Language>
+	</StationType>
+
+	<!-- Beacon -->
+
+	<StationType UNID="&ADT_stDebugBeacon;"
+			name=				"(stargate beacon)"
+			sovereign=			"&svNeutral;"
+			noMapLabel=			"true"
+			immutable=			"true"
+			beacon=				"true"
+			mass=				"5000"
+			dockScreen=			"Main"
+			>
+
+		<Image imageID="&ADT_rsDebugBeacon;" imageX="0" imageY="0" imageWidth="44" imageHeight="44"/>
+		<Image imageID="&ADT_rsDebugBeaconHero;" imageWidth="320" imageHeight="320" loadOnUse="true"/>
+
+		<DockingPorts
+				portCount=		"4"
+				portRadius=		"30"
+				>
+		</DockingPorts>
+		
+		<DockScreens>
+			<Main>
+				<Panes>
+					<Default descID="descWelcome">
+						<Actions>
+							<Action name="Undock" cancel="1" key="U">
+								<Exit/>
+							</Action>
+						</Actions>
+					</Default>
+				</Panes>
+			</Main>
+		</DockScreens>
+
+		<Language>
+			<Text id="descWelcome">
+
+				You are docked at a debug beacon. You made this, either directly or
+				indirectly. There is no mystery to it, you have debug tools enabled
+				and are thus more powerful than either Domina or Oracus.
+
+			</Text>
+		</Language>
+
+	</StationType>
+
+<!-- Helper Types -->
+
+	<Type UNID="&ADT_vvTravelHelper;">
+		<Events>
+			<OnGlobalPlayerEnteredSystem>
+				(block ()
+					(typAddTimerEvent &ADT_vvTravelHelper; 1 'TravelToNextSystem)
+					(ADT_mapAllObjectsOnGate)
+				)
+			</OnGlobalPlayerEnteredSystem>
+			<TravelToNextSystem>
+				(ADT_gateAllNodesNext)
+			</TravelToNextSystem>
+		</Events>
+	</Type>
+
+	<Type UNID="&ADT_vvGateCreateHelper;">
+		<Events>
+			<OnGlobalPlayerEnteredSystem>
+				(block ((paramStruct (typGetData &ADT_vvGateCreateHelper; 'params)))
+					(if (and paramStruct (eq (@ paramStruct 'toNode) (sysGetNode)))
+						(block
+							(
+								(fromNode (@ paramStruct 'fromNode))
+								(fromGate (@ paramStruct 'fromGate))
+								(toNode (@ paramStruct 'toNode))
+								(toGate (@ paramStruct 'toGate))
+								(options (@ paramStruct 'options))
+								(gateType (@ options 'gateType))
+								(beaconType (@ options 'beaconType))
+								(locationCriteria "+++outerSystem; !void;")
+								allGates
+								gateObj
+								beacon1Pos
+								beacon2Pos
+							)
+
+							;;	Create the stargate
+
+							(setq gateObj (sysCreateStargate
+								gateType
+								(list 'location locationCriteria)
+								toGate
+							))
+								
+							;;	If we could not create the gate, it is probably because we did not
+							;;	have enough locations. This should never happen, but just in case we
+							;;	handle it here.
+							
+							(if (not gateObj)
+								(setq gateObj (sysCreateStargate gateType (sysVectorRandom () (random 500 600) 10) toGate))
+							)
+								
+							;;	Debug gates are never considered coreward
+							
+							(setq beacon1Pos (sysVectorPolarOffset gateObj 270 12))
+							(setq beacon2Pos (sysVectorPolarOffset gateObj 0 12))
+								
+							;;	Create beacons
+
+							(sysCreateStation beaconType beacon1Pos)
+							(sysCreateStation beaconType beacon2Pos)
+
+							;;	Move player to gate
+
+							(objSetPos gPlayerShip (objGetPos gateObj))
+
+							;;	Clear our state so we dont do this again
+
+							(typSetData &ADT_vvGateCreateHelper; 'params ())
+						)
+					)
+				)
+			</OnGlobalPlayerEnteredSystem>
+		</Events>
+	</Type>
+
+	<!-- Global Loader Types -->
+
+    <Type UNID="&ADT_vvGlobalLoaderTravel;"
+		inherit="&ADT_baGlobalLoaderBase;"
+		attributes="ADT_loader"
+		>
+		<Properties>
+			<Definition id="adt.loader.dependencies">
+				(list )
+			</Definition>
+		</Properties>
+        <Events>
+            <ADT.onLoadGlobals>
+                (block ()
+
+                    ;   Global constants
+
+                    ;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Galactic map functions
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Discover all nodes in the galaxy
+					(setq ADT_mapAllNodes (lambda () (enum (sysGetNodes) theNode (sysSetKnown theNode true))))
+
+					;;	Clear gate node list
+					(setq ADT_gateClearHelper (lambda ()
+						(block () 
+							(typSetData &ADT_vvTravelHelper; 'SystemsLeft ())
+							(typSetData &ADT_vvTravelHelper; 'MapSystemsMode ())
+							(typSetData &ADT_vvTravelHelper; 'AlreadyImmune ())
+							(typSetData &ADT_vvTravelHelper; 'AlreadyRespawn ())
+						)
+					))
+
+					;;	Travel to all nodes in the galaxy
+					(setq ADT_gateAllNodes (lambda (mapSystems) 
+						(block
+							(
+								(theSystems (sysGetNodes))
+							)
+							(ADT_gateClearHelper)
+							(ADT_mapAllObjectsOnGate)
+							(typSetData &ADT_vvTravelHelper; 'SystemsLeft theSystems)
+							(typSetData &ADT_vvTravelHelper; 'MapSystemsMode mapSystems)
+							(typSetData &ADT_vvTravelHelper; 'AlreadyImmune (ADT_immunityGet))
+							(typSetData &ADT_vvTravelHelper; 'AlreadyRespawn (ADT_respawnGet))
+							(ADT_immunitySet True)
+							(ADT_respawnSetHelper)
+							(ADT_gateAllNodesNext)
+						)
+					))
+
+					;;	Travel to node in the galaxy
+					(setq ADT_gateToNode (lambda (theNode mapSystems) 
+						(block
+							(
+								(theSystems (list theNode))
+							)
+							(ADT_gateClearHelper)
+							(ADT_mapAllObjectsOnGate)
+							(typSetData &ADT_vvTravelHelper; 'SystemsLeft theSystems)
+							(typSetData &ADT_vvTravelHelper; 'MapSystemsMode mapSystems)
+							(typSetData &ADT_vvTravelHelper; 'AlreadyImmune (ADT_immunityGet))
+							(typSetData &ADT_vvTravelHelper; 'AlreadyRespawn (ADT_respawnGet))
+							(ADT_immunitySet True)
+							(ADT_respawnSetHelper)
+							(ADT_gateAllNodesNext)
+						)
+					))
+
+					;;	Gate player to system blindly without have a real destination picked
+					(setq ADT_gateTo (lambda (destNode)
+						(block
+							(
+								(destGate (or (@ (sysGetStargates destNode) 0) 'unknown))
+							)
+							(objGateTo gPlayerShip destNode destGate)
+						)
+					))
+
+					;;	Travel to next node in the galaxy
+					(setq ADT_gateAllNodesNext (lambda ()
+						(block
+							(
+								(theSystems (typGetData &ADT_vvTravelHelper; 'SystemsLeft))
+							)
+							(if theSystems
+								(block ((nextSystem (@ theSystems 0)))
+									(typSetData &ADT_vvTravelHelper; 'SystemsLeft (subset theSystems 1 (count theSystems)))
+									(if (eq (sysGetNode) nextSystem)
+										(ADT_gateAllNodesNext)
+										(ADT_gateTo nextSystem)
+									)
+								)
+								;;if we are  out of systems to travel to
+								(block ()
+									(if (not (typGetData &ADT_vvTravelHelper; 'AlreadyImmune)) (ADT_immunitySet ()))
+									(if (not (typGetData &ADT_vvTravelHelper; 'AlreadyRespawn)) (ADT_respawnClearHelper))
+									(typSetData &ADT_vvTravelHelper; 'MapSystemsMode ())
+								)
+							)
+						)
+					))
+
+					;;	Create ADT Gate Link Info
+					(setq ADT_gateCreateLinkInfo (lambda (theNode)
+						(block
+							(
+								(thisNode (sysGetNode))
+								(thisNodeLinkName (cat 'ADT_LINK_ theNode))
+								(theNodeLinkName (cat 'ADT_LINK_ thisNode))
+								(adtGateOptions {
+									attributes: "ADT_link"
+									toAttributes: "ADT_link, noAutoGateCreate"	;;	most systems will auto create a gate but not all, so we just manually do this
+									gateType: &ADT_stDebugStargate;
+									beaconType: &ADT_stDebugBeacon;
+									color: "#88FFFF00" ;ARGB transparent magenta for high visibility
+								})
+							)
+							{
+								fromNode: thisNode
+								toNode: theNode
+								fromGate: thisNodeLinkName
+								toGate: theNodeLinkName
+								options: adtGateOptions
+							}
+						)
+					))
+
+					;;	Create Link to node in the galaxy from this node
+					(setq ADT_gateCreateLink (lambda (theNode) 
+						(block
+							(
+								(paramStruct (ADT_gateCreateLinkInfo theNode))
+								(adtLinkExists (find (sysGetStargates) (@ paramStruct 'fromGate)))
+								(linkExists (or adtLinkExists (map (sysGetStargates) 'excludeNil someGate (eq (sysGetStargateDestinationNode someGate) theNode))))
+							)
+							(if linkExists
+								() ;;skip if link exists already
+								(block
+									(
+										(fromNode (@ paramStruct 'fromNode))
+										(fromGate (@ paramStruct 'fromGate))
+										(toNode (@ paramStruct 'toNode))
+										(toGate (@ paramStruct 'toGate))
+										(options (@ paramStruct 'options))
+										(gateType (@ options 'gateType))
+										(beaconType (@ options 'beaconType))
+										gateObj
+										beacon1Pos
+										beacon2Pos
+									)
+									(sysAddStargateTopology
+										fromNode
+										fromGate
+										toNode
+										toGate
+										options
+									)
+									(setq gateObj (sysCreateStargate
+										gateType
+										(objGetPos gPlayerShip)
+										fromGate
+									))
+									(setq beacon1Pos (sysVectorPolarOffset gateObj 270 12))
+									(setq beacon2Pos (sysVectorPolarOffset gateObj 0 12))
+									(sysCreateStation beaconType beacon1Pos)
+									(sysCreateStation beaconType beacon2Pos)
+									(typSetData &ADT_vvGateCreateHelper; 'params paramStruct)
+									(ADT_gateToNode toNode)
+								)
+							)
+						)
+					))
+
+					;;	Sort Nodes
+					(setq ADT_sortKeySysNodes (lambda (node)
+						(cat
+							"\nLEVEL:"
+							(hex (sysGetLevel node) 2)
+							"\nNAME:"
+							(sysGetName node)
+							"\nNODE:"
+							node
+						)
+					))
+
+					;;	Sort Systems Objects
+					(setq ADT_sortKeySysObjects (lambda (obj)
+						(cat
+							"TYPE_PRIORITY:"
+							(hex (ADT_objCategoryPriority obj) 8)
+							"\nOWNER:"
+							(sovGetName (obj@ obj 'sovereign))
+							"\nOWNER_UNID:"
+							(hex (obj@ obj 'sovereign) 8)
+							"\nNAME:"
+							(itmGetName itmType)
+							"\nUNID:"
+							(fmtUNID itmType)
+						)
+					))
+
+					;;	Object Priority Sort subkey
+					(setq ADT_objCategoryPriority (lambda (obj)
+						(block
+							(
+								(m (lambda (criteria) (objMatches obj gPlayerShip criteria)))
+								(isGate (m "G"))
+								(isAlive (m "A"))
+								(isStation (m "T"))
+								(isShip (m "s"))
+								(isPlayer (= (obj@ obj 'sovereign) &svPlayer;))
+								(isFriend (= (sovGetDisposition (obj@ obj 'sovereign) &svPlayer;) 'friend))
+								(isNeutral (= (sovGetDisposition (obj@ obj 'sovereign) &svPlayer;) 'neutral))
+								(isEnemy (= (sovGetDisposition (obj@ obj 'sovereign) &svPlayer;) 'enemy))
+								(isWorld (m "t"))
+								(isProjectile (m "b|m"))
+								(isVirtual (m "V"))
+								(isUntyped (=== (objGetType obj)))
+							)
+							(switch
+								isUntyped
+									0xFFFFFFFF
+								isGate
+									0x0
+								isVirtual
+									0xFFFFFFFE
+								(and isStation isAlive isPlayer)
+									0x10
+								(and isStation isAlive isFriend)
+									0x11
+								(and isStation isAlive isNeutral)
+									0x12
+								(and isStation isAlive isEnemy)
+									0x13
+								(and isStation isAlive)		;;	invalid disposition
+									0x14
+								(and isStation isPlayer)
+									0x20
+								(and isStation isFriend)
+									0x21
+								(and isStation isNeutral)
+									0x22
+								(and isStation isEnemy)
+									0x23
+								isStation
+									0x24
+								(and isShip isAlive isPlayer)
+									0x30
+								(and isShip isAlive isFriend)
+									0x31
+								(and isShip isAlive isNeutral)
+									0x32
+								(and isShip isAlive isEnemy)
+									0x33
+								(and isShip isAlive)	;;	invalid disposition
+									0x34
+								(and isShip isPlayer)
+									0x40
+								(and isShip isFriend)
+									0x41
+								(and isShip isNeutral)
+									0x42
+								(and isShip isEnemy)
+									0x43
+								isShip
+									0x44
+								isWorld
+									0x50
+								isProjectile
+									0xFFFFFFFD
+								;;	other
+								0x80000000
+							)
+						)
+					))
+
+					;;	Map everything in the system
+					(setq ADT_mapAllObjects (lambda () (enum (sysFindObject gSource "*") theObj (objSetKnown theObj))))
+
+					;;	Map everything in the system if we are doing that while gating
+					(setq ADT_mapAllObjectsOnGate (lambda () (if (typGetData &ADT_vvTravelHelper; 'MapSystemsMode) (ADT_mapAllObjects) ())))
+
+					;;	Open Gate menu
+					(setq ADT_gateMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsTravelMain;)))
+
+					;;	Open Gate menu
+					(setq ADT_gateSystemMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsTravelSystem;)))
+
+					;;	Open teleport to object menu
+					(setq ADT_gateObjectMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsTravelObject;)))
+
+					;;	Open Gate create menu
+					(setq ADT_gateCreateMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsLinkSystem;)))
+
+					;;	List of all gate menu options (can be extended by other mods)
+					(setq ADT_uiGateMenuOptions (list
+						{
+							text: "Map this system"
+							action: ADT_mapAllObjects
+							args: ()
+						}
+						{
+							text: "Map galaxy"
+							action: ADT_mapAllNodes
+							args: ()
+						}
+						{
+							text: "Jump to object"
+							action: ADT_gateObjectMenuOpen
+							args: ()
+							isDS: True
+						}
+						{
+							text: "Jump to system"
+							action: ADT_gateSystemMenuOpen
+							args: ()
+							isDS: True
+						}
+						{
+							text: "Create gate to system"
+							action: ADT_gateCreateMenuOpen
+							args: ()
+							isDS: True
+						}
+						{
+							text: "Travel to &amp; map all systems (WARNING: SLOW)"
+							action: ADT_gateAllNodes
+							args: (list True)
+						}
+					))
+
+                )
+            </ADT.onLoadGlobals>
+        </Events>
+    </Type>
+
+</TranscendenceModule>
