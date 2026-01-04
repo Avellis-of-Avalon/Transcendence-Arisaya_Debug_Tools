@@ -315,6 +315,37 @@
 						)
 					))
 
+					;;	display simple customPicker list option and description style from a struct
+					(setq ADT_uiDisplayStructPickerList (lambda (uiOptionsStruct)
+						(block
+							(
+								(pickerList (list))
+								(uiOptions (@ uiOptionsStruct))
+							)
+							(enum uiOptions option
+								(block
+									(
+										(text option)
+										(desc (@ uiOptionsStruct option))
+									)
+									(lnkAppend pickerList 
+										(list 
+											;;set the display name
+											text
+											;;set the image
+											()
+											;;construct the description
+											desc
+											;;additional data
+											option
+										)
+									)
+								)
+							)
+							pickerList
+						)
+					))
+
 					;;	display customPicker list
 					(setq ADT_uiDisplayPickerList (lambda (uiOptions)
 						(block

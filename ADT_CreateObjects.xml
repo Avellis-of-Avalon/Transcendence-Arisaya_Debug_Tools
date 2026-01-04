@@ -35,14 +35,14 @@
 	</DockScreen>
 	
 	<DockScreen UNID="&ADT_dsCreateObjectOptions;"
-			name=				"Arisaya Debug Tools: Ship"
+			name=				"Arisaya Debug Tools: Create Object Settings"
 			type=				"customPicker"
 			backgroundID=		"&rsItemListScreen;"
 			nestedScreen=		"true"
 			>
 		<!-- Define the list we need -->
 		<List iconWidth="0">
-			(ADT_uiDisplayPickerList ADT_uiCreateObjectOptionsMenuOptions)
+			(ADT_uiDisplayPickerList ADT_uiCreateObjectSettingsMenuOptions)
 		</List>
 		<Panes>
 			<Default desc="Pick an action to perform">
@@ -52,6 +52,136 @@
 				<Actions>
 					<Action name="Activate Option" default="1" key="A">
 						(ADT_uiActivateOption)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsCreateObjectOptionsMode;"
+			name=				"Arisaya Debug Tools: Create Object Mode"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayStructPickerList ADT_objCreateModeUI)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Set Option" default="1" key="S">
+						(block
+							(
+								(optionEntry (scrGetListEntry gScreen))
+								(option (item optionEntry 3))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.mode" option)
+							(scrRefreshScreen gScreen)
+							(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+						)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsCreateObjectOptionsLoc;"
+			name=				"Arisaya Debug Tools: Create Object Location"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(ADT_uiDisplayStructPickerList ADT_objCreateLocationUI)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Set Option" default="1" key="S">
+						(block
+							(
+								(optionEntry (scrGetListEntry gScreen))
+								(option (item optionEntry 3))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.location" option)
+							(scrRefreshScreen gScreen)
+							(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+						)
+					</Action>
+					<Action name="Exit" cancel="1" key="E">
+						(block ()
+							(ADT_setTemp 'cursor 0)
+							(scrExitScreen gScreen)
+						)
+					</Action>
+				</Actions>
+			</Default>
+		</Panes>
+	</DockScreen>
+	
+	<DockScreen UNID="&ADT_dsCreateObjectOptionsSov;"
+			name=				"Arisaya Debug Tools: Create Object Sovereign"
+			type=				"customPicker"
+			backgroundID=		"&rsItemListScreen;"
+			nestedScreen=		"true"
+			>
+		<!-- Define the list we need -->
+		<List iconWidth="0">
+			(block
+				(
+					(pickerList (list
+						(list
+						;;	Title
+						"Object's Default"
+						;;	Image
+						()
+						;;	Description
+						"Attempts to use the default sovereign for the object if one is specified. Otherwise uses ADT_Neutral."
+						;;	Sov Type
+						()
+						)
+					))
+				)
+				pickerList
+			)
+		</List>
+		<Panes>
+			<Default desc="Pick an action to perform">
+				<onPaneInit>
+				</onPaneInit>
+				<Actions>
+					<Action name="Set Option" default="1" key="S">
+						(block
+							(
+								(optionEntry (scrGetListEntry gScreen))
+								(sov (item optionEntry 3))
+							)
+							(ADT_setTemp 'cursor (scrGetListCursor gScreen))
+							(typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.sov" sov)
+							(scrRefreshScreen gScreen)
+							(scrSetListCursor gScreen (ADT_getTemp 'cursor))
+						)
 					</Action>
 					<Action name="Exit" cancel="1" key="E">
 						(block ()
@@ -172,21 +302,70 @@
 									(
 										(option (item optionEntry 3))
 										(theType (@ option 'theType))
-										(spawnPos (objGetPos gPlayerShip))
 										(isShip (typMatches thetype "s"))
+										(defaultSov (or (typ@ theType 'defaultSovereign) &ADT_svCreateObjectNullSov;))
+										(sov (or (ADT_objCreateGetSov) defaultSov))
+										(mode (ADT_objCreateGetMode))
+										(locationMode (ADT_objCreateGetLocation))
+										(playerTarget (objGetTarget gPlayerShip))
+										(spawnPos
+											(switch
+												(= locationMode "player")
+													(objGetPos gPlayerShip)
+												(= locationMode "target")
+													(if playerTarget (objGetPos playerTarget) (objGetPos gPlayerShip))
+												(= locationMode "random")
+													(sysGetRandomLocation "---void")
+												;	fallback is always the playership
+												(objGetPos gPlayerShip)
+											)
+										)
 									)
 									(if isShip
 										(block 
 											(
-												(theShip (sysCreateShip theType spawnPos (or (typ@ theType 'defaultSovereign) &ADT_svCreateObjectNullSov;)))
-												(theShipRef (objGetID theShip))
-												(theAnchor (sysCreateStation &ADT_vtCreateObjectShipAnchor; spawnPos))
-												(theAnchorRef (objGetID theAnchor))
 											)
-											(shpOrder theShip 'orbit theAnchor 70)
-											(objSetData theShip 'ADT_anchor theAnchorRef)
-											(objSetData theAnchor 'ADT_anchoredShip theShip)
-											(objRegisterForEvents theAnchor theShip)	;;	this is so that the anchor can delete itself if the ship is deleted/destroyed
+											(switch
+												;	if orbit or nil
+												(or (= mode "orbit") (=== mode))
+													(block
+														(
+															(theShip (sysCreateShip theType spawnPos sov))
+															(theShipRef (objGetID theShip))
+															(theAnchor (sysCreateStation &ADT_vtCreateObjectShipAnchor; spawnPos))
+															(theAnchorRef (objGetID theAnchor))
+														)
+														(shpOrder theShip 'orbit theAnchor 70)
+														(objSetData theShip 'ADT_anchor theAnchorRef)
+														(objSetData theAnchor 'ADT_anchoredShip theShip)
+														(objRegisterForEvents theAnchor theShip)	;;	this is so that the anchor can delete itself if the ship is deleted/destroyed
+													)
+												(= mode "guard")
+													(block
+														(
+															(theShip (sysCreateShip theType spawnPos sov))
+															(theShipRef (objGetID theShip))
+															(theAnchor (sysCreateStation &ADT_vtCreateObjectShipAnchor; spawnPos))
+															(theAnchorRef (objGetID theAnchor))
+														)
+														(shpOrder theShip 'patrol theAnchor 70)
+														(objSetData theShip 'ADT_anchor theAnchorRef)
+														(objSetData theAnchor 'ADT_anchoredShip theShip)
+														(objRegisterForEvents theAnchor theShip)	;;	this is so that the anchor can delete itself if the ship is deleted/destroyed
+													)
+												(= mode "hunt")
+													(sysCreateShip theType spawnPos sov &ADT_evCreateObjectControllerHunt;)
+												(= mode "patrol")
+													(sysCreateShip theType spawnPos sov &ADT_evCreateObjectControllerPatrol;)
+												;	fallback, we just have the ship gate out
+												(block
+													(
+														(theShip (sysCreateShip theType spawnPos sov))
+													)
+													(dbgLog "Invalid mode: " mode)
+													(shpOrder theShip 'gate)
+												)
+											)
 										)
 										(sysCreateStation thetype spawnPos)
 									)
@@ -363,7 +542,151 @@
 
     <!-- Helper Types -->
     
-	<Type UNID="&ADT_vvCreateObjectSettings;"/>
+	<Type UNID="&ADT_vvCreateObjectSettings;">
+		<Properties>
+			<Global id="adt.objCreate.sov">
+				;	Nil is default sov
+				;
+				;	otherwise spawns as the sovereign type set here
+				()
+			</Global>
+			<Global id="adt.objCreate.mode">
+				;	Only applies to ships
+				;
+				;	Modes are:
+				;		- orbit: orbits an anchor
+				;		- defend: defends an anchor
+				;		- hunt:	cheat-searches for enemies in the system, once all enemies are dead, sits around and waits for more enemies
+				;		- patrol: flies between gates in this system, if multiple gates are available. Otherwise leaves.
+				"orbit"
+			</Global>
+			<Global id="adt.objCreate.location">
+				;	Spawn location
+				;
+				;	Modes are:
+				;		- player: spawns at the player
+				;		- target: spawns at the current target of the player (otherwise spawns at player)
+				;		- random: spawns in a random location in the system
+				"player"
+			</Global>
+		</Properties>
+	</Type>
+
+	<!-- Event Controllers -->
+
+	<Type UNID="&ADT_evCreateObjectControllerHunt;">
+		<Properties>
+			<DynamicData id="adt.objCreate.huntTarget">
+				;	Get nearest active enemy that isnt the player
+				;	The player very likely set invulnerability if they are
+				;	doing something that involves spawning in ships
+				;	We can use a different option for handling attacking the player
+				(sysFindObject gSource "sTAENZ")
+			</DynamicData>
+			<Data id="adt.objCreate.curTarget">
+			</Data>
+		</Properties>
+		<Events>
+			<OnEventHandlerInit>
+				(block
+					(
+						(target (obj@ gSource "adt.objCreate.huntTarget"))
+					)
+					(if target
+						(block ()
+							(shpOrder gSource 'attack target)
+							(objSet@ gSource "adt.objCreate.curTarget" (objGetId target))
+						)
+						(shpOrder gSource 'gate)
+					)
+				)
+			</OnEventHandlerInit>
+			<OnOrdersCompleted>
+				(block
+					(
+						(target (obj@ gSource "adt.objCreate.huntTarget"))
+					)
+					(if target
+						(block ()
+							(shpOrder gSource 'attack target)
+							(objSet@ gSource "adt.objCreate.curTarget" (objGetId target))
+						)
+						(block ()
+							(shpOrder gSource 'gate)
+							(objSet@ gSource "adt.objCreate.curTarget" ())
+						)
+					)
+				)
+			</OnOrdersCompleted>
+		</Events>
+	</Type>
+
+	<Type UNID="&ADT_evCreateObjectControllerPatrol;">
+		<Properties>
+			<Data id="adt.objCreate.patrolList">
+				(block
+					(
+						(patrolList (list ))
+						(gates (sysFindObject () "G"))
+						(friendlyStations (sysFindObject () "TAF"))
+						;	these are fallbacks if we dont have enough stuff in the system
+						(origin (vector '(0 0)))
+						(randomInnerSystemLocation (sysVectorPolarOffset origin (random 0 360) (random 150 300)))
+						(randomOuterSystemLocation (sysVectorPolarOffset origin (random 0 360) (random 450 700)))
+					)
+					(enum gates gate (lnkAppend patrolList (objGetPos gate)))
+					(if (ls (count patrolList) 3)
+						(enum friendlyStations station (lnkAppend patrolList (objGetPos station)))
+					)
+					(if (ls (count patrolList) 3)
+						(lnkAppend patrolList randomInnerSystemLocation)
+					)
+					(if (ls (count patrolList) 3)
+						(lnkAppend patrolList randomOuterSystemLocation)
+					)
+				)
+			</Data>
+			<Data id="adt.objCreate.patrolIdx">
+			</Data>
+			<Data id="adt.objCreate.curNavPointID">
+			</Data>
+		</Properties>
+		<Events>
+			<OnEventHandlerInit>
+				(block
+					(
+						(idx 0)
+						(posList (obj@ gSource "adt.objCreate.patrolList"))
+						(nextPos (@ posList 0))
+						(navPoint (sysCreateMarker "Patrol Point" nextPos &ADT_svCreateObjectNullSov;))
+					)
+					(objSet@ gSource "adt.objCreate.patrolIdx" 0)
+					(objSet@ gSource "adt.objCreate.curNavPointID" (objGetID navPoint))
+					(shpOrder gSource 'approach navPoint 10)
+				)
+			</OnEventHandlerInit>
+			<OnOrdersCompleted>
+				(block
+					(
+						(prevNavPoint (objGetObjByID (obj@ gSource "adt.objCreate.curNavPointID")))
+						(idx (obj@ gSource "adt.objCreate.patrolIdx"))
+						(posList (obj@ gSource "adt.objCreate.patrolList"))
+						(nextIdx (if (geq (+ 1 idx) (count posList)) 0 (+ 1 idx)))
+						(nextPos (@ posList nextIdx))
+						(navPoint (sysCreateMarker "Patrol Point" nextPos &ADT_svCreateObjectNullSov;))
+					)
+					(objSet@ gSource "adt.objCreate.patrolIdx" nextIdx)
+					(objRemove prevNavPoint)
+					(objSet@ gSource "adt.objCreate.curNavPointID" (objGetID navPoint))
+					(shpOrder gSource 'approach navPoint 10)
+				)
+			</OnOrdersCompleted>
+			<OnDestroy>
+				;	Cleanup any nav points
+				(objRemove (objGetObjByID (obj@ gSource "adt.objCreate.curNavPointID")))
+			</OnDestroy>
+		</Events>
+	</Type>
 
 	<!-- Global Loader Types -->
 
@@ -382,7 +705,81 @@
 
                     ;   Global constants
 
+					(setq ADT_objCreateModeUI {
+						orbit: "Orbit a fixed location"
+						defend: "Defend a fixed location"
+						hunt: "Hunt down enemy ships in this system"
+						patrol: "Patrol this system"
+					})
+
+					(setq ADT_objCreateLocationUI {
+						player: "Spawn at your current location"
+						target: "Spawn at the location of your target (or yourself if you have no target)"
+						random: "Spawn at a random location in the system (Favors system generation locations)"
+					})
+
                     ;   Lambdas
+
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+					;;	Create object modes
+					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+					;;	Accessors
+					(setq ADT_objCreateGetSov (lambda () (typ@ &ADT_vvCreateObjectSettings; "adt.objCreate.sov")))
+					(setq ADT_objCreateGetMode (lambda () (typ@ &ADT_vvCreateObjectSettings; "adt.objCreate.mode")))
+					(setq ADT_objCreateGetLocation (lambda () (typ@ &ADT_vvCreateObjectSettings; "adt.objCreate.location")))
+
+					;;	Setters
+					(setq ADT_objCreateSetSov (lambda (sov) (typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.sov" sov)))
+					(setq ADT_objCreateSetMode (lambda (mode)
+						(if (@ ADT_objCreateModeUI mode)
+							(typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.mode" mode)
+							(typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.mode" "orbit")
+						)
+					))
+					(setq ADT_objCreateSetLocation (lambda (loc)
+						(if (@ ADT_objCreateLocationUI loc)
+							(typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.location" loc)
+							(typSet@ &ADT_vvCreateObjectSettings; "adt.objCreate.location" "player")
+						)
+					))
+
+					;;	Settings menu
+
+					;;	Open obj create mode menu
+					(setq ADT_objCreateObjectModeMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsCreateObjectOptionsMode;)))
+					;;	Open obj create mode menu text
+					(setq ADT_objCreateObjectModeMenuText (lambda () (cat "Mode: " (ADT_objCreateGetMode))))
+
+					;;	Open obj create location menu
+					(setq ADT_objCreateObjectPosMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsCreateObjectOptionsLoc;)))
+					;;	Open obj create location menu text
+					(setq ADT_objCreateObjectPosMenuText (lambda () (cat "Position: " (ADT_objCreateGetLocation))))
+
+					;;	Open obj create sov menu
+					(setq ADT_objCreateObjectSovMenuOpen (lambda () (scrShowScreen gScreen &ADT_dsCreateObjectOptionsSov;)))
+					;;	Open obj create sov menu text
+					(setq ADT_objCreateObjectSovMenuText (lambda () (cat "Sovereign: " (block ((sov ADT_objCreateGetSov)) (if sov (typGetName sov) "Object's Default")))))
+
+
+					;;	List of all create objects settings menu options (can be extended by other mods)
+					(setq ADT_uiCreateObjectSettingsMenuOptions (list
+						{
+							text: ADT_objCreateObjectModeMenuText
+							action: ADT_objCreateObjectModeMenuOpen
+							isDS: True
+						}
+						{
+							text: ADT_objCreateObjectPosMenuText
+							action: ADT_objCreateObjectPosMenuOpen
+							isDS: True
+						}
+						{
+							text: ADT_objCreateObjectSovMenuText
+							action: ADT_objCreateObjectSovMenuOpen
+							isDS: True
+						}
+					))
 
 					;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 					;;	Create object functions
@@ -473,10 +870,6 @@
 							action: ADT_objCreateObjectOptionsMenuOpen
 							isDS: True
 						}
-					))
-
-					;;	List of all create objects main menu options (can be extended by other mods)
-					(setq ADT_uiCreateObjectOptionsMenuOptions (list
 					))
 
 					;;	Open obj create menu

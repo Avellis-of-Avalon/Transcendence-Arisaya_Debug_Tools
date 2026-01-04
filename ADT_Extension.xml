@@ -69,7 +69,11 @@
 	<!ENTITY ADT_svCreateObjectTeamA					"0xD3140668">
 	<!ENTITY ADT_svCreateObjectTeamB					"0xD3140669">
 	<!ENTITY ADT_svCreateObjectTeamC					"0xD314066A">
-	<!ENTITY ADT_vcCreateShipController					"0xD314066B">
+	<!ENTITY ADT_evCreateObjectControllerPatrol			"0xD314066B">
+	<!ENTITY ADT_evCreateObjectControllerHunt			"0xD314066C">
+	<!ENTITY ADT_dsCreateObjectOptionsMode				"0xD314066D">
+	<!ENTITY ADT_dsCreateObjectOptionsLoc				"0xD314066E">
+	<!ENTITY ADT_dsCreateObjectOptionsSov				"0xD314066F">
 
 	<!ENTITY ADT_vvGlobalLoaderObjCreate				"0xD314067F">
 
