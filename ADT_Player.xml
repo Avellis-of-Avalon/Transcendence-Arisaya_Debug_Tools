@@ -29,7 +29,7 @@
 			 	(enum (itmGetTypes filterCriteria) itmType
 					(block
 						(
-							(itemName (itmGetName itmType))
+							(itemName (itmGetName itmType 0x100))
 						)
 						(typSetData &ADT_dsItemsMain; 'lastFilterCriteria filterCriteria)
 						(typSetData &ADT_dsItemsMain; 'lastFilterName filterName)
